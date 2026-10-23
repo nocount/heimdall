@@ -32,7 +32,8 @@ def fetch(binary: str, video_id: str, url: str) -> dict:
         capture_output=True, text=True, timeout=90,
     )
     if proc.returncode != 0:
-        return {"video_id": video_id, "url": url, "error": proc.stderr.strip()[-300:]}
+        errors = [l for l in proc.stderr.splitlines() if l.startswith("ERROR:")]
+        return {"video_id": video_id, "url": url, "error": (errors[-1] if errors else proc.stderr.strip())[:400]}
     info = json.loads(proc.stdout)
     return {
         "video_id": video_id,
