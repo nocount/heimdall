@@ -1,0 +1,50 @@
+# heimdall config. Installed at /etc/heimdall/config.yaml (root:heimdall, 0640).
+# For development, copy to config.local.yaml and point HEIMDALL_CONFIG at it.
+
+timezone: America/Los_Angeles
+focus_windows:
+  - days: [mon, tue, wed, thu, fri]
+    start: "09:00"
+    end: "17:00"
+
+# Shadow mode: always serve "allow", but log the would-be verdict. Phase 1.
+shadow: true
+
+# Dev only: true/false overrides the schedule, null follows it.
+force_focus: null
+
+db_path: /var/lib/heimdall/heimdall.db
+
+classifier:
+  provider: workers_ai          # workers_ai | openrouter | local_llamacpp
+  model: "@cf/cloudflare/clef-flash"
+  timeout_ms: 1500
+  thresholds: { educational: 0.75, content_conf: 0.6, ai_related: 0.7 }
+  fallback:                     # optional; requires local GGUF + llama-server
+    provider: local_llamacpp
+    model: clef-flash
+    url: http://127.0.0.1:8081
+    timeout_ms: 1500
+
+appeals:                        # Phase 2; not used yet
+  model: claude-haiku-5-5
+  min_words: 8
+  max_per_day: 5
+  deny_cooldown_min: 10
+  max_grant_min: 40
+
+rules:
+  youtube:
+    allow_types: [tutorial_or_lecture, technical_talk]
+    block_paths: ["/", "/shorts/*", "/feed/*"]
+  x:
+    block_paths: ["/home", "/explore", "/explore/*", "/notifications", "/notifications/*", "/i/lists/*"]
+  hard_block_domains: []        # e.g. [reddit.com]
+  always_allow_domains: []
+
+cache_ttl_days: { youtube: 30, x: 1 }
+
+watchdog:                       # Phase 3; not used yet
+  heartbeat_timeout_s: 60
+  startup_grace_s: 90
+  kill_browsers: [chromium, chrome, google-chrome, brave, vivaldi, opera, epiphany]

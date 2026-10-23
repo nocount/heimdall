@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Personal browsing data: labels, history exports, bench results
+bench/data/*
+!bench/data/.gitkeep
+!bench/data/x_samples.example.csv
+
+# Local overrides
+config.local.yaml
+secrets.env
+
+extension/node_modules/
+extension/web-ext-artifacts/
+.web-ext-profile/
