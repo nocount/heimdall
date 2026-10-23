@@ -3,6 +3,7 @@
 1. outside focus window      -> allow
 2. active grant for the page -> allow
 3. static rules              -> block X, feeds and shorts; allow browse surfaces
+   allowlisted channel       -> allow, no model call
 4. cached model answers      -> re-apply rules
 5. model call                -> apply rules
 6. model error / no metadata -> block (fail closed)
@@ -57,26 +58,20 @@ def _pct(p: float) -> str:
 
 
 def apply_rules(site: str, answers: dict, th: Thresholds) -> RuleOutcome:
-    """Combine atomic answers into a verdict. Pure; the bench uses this too.
-
-    YouTube is judged on `educational` alone. Phase 0 showed content_type
-    gating blocked the AI interviews and podcasts that should be allowed (the
-    models rightly call them commentary), so content_type only names the
-    category in the reason.
-    """
-    ctype = answers.get("content_type") or {}
-    choice = ctype.get("choice")
-    choice_p = (ctype.get("probabilities") or {}).get(choice, ctype.get("confidence", 0.0))
-    category = f"{choice} ({_pct(choice_p)})" if choice else None
-
+    """Turn the model's answers into a verdict. Pure; the bench uses this too."""
     if site == "youtube":
-        edu = answers["educational"]["noul"]
-        details = {"educational": edu, "content_type": choice}
-        if edu >= th.educational:
-            return RuleOutcome(ALLOW, f"{_pct(edu)} educational ({category})", category, details)
-        return RuleOutcome(BLOCK, f"only {_pct(edu)} educational ({category})", category, details)
+        p = answers["worth_learning"]["noul"]
+        details = {"worth_learning": p}
+        if p >= th.worth_learning:
+            return RuleOutcome(ALLOW, f"rated {_pct(p)} worth learning from", None, details)
+        return RuleOutcome(BLOCK, f"rated only {_pct(p)} worth learning from", None, details)
 
     raise ValueError(f"no rules for site {site}")
+
+
+def allowlisted_channel(page: Page, metadata: dict | None, config: Config) -> bool:
+    channel_id = (metadata or {}).get("channel_id")
+    return page.site == "youtube" and bool(channel_id) and channel_id in config.rules.youtube.allow_channels
 
 
 def static_rule(page: Page, config: Config) -> tuple[str, str] | None:
@@ -122,10 +117,16 @@ class Policy:
 
         ttl_s = 3600
 
+        if allowlisted_channel(page, metadata, self.config):
+            return Decision(ALLOW, "channel", f"allowlisted channel: {metadata.get('channel')}", ttl_s=ttl_s)
+
         if (hit := self.cache.get(page, now)) is not None:
             model, answers = hit
-            out = apply_rules(page.site, answers, self.config.classifier.thresholds_for(model))
-            return Decision(out.verdict, "cache", out.reason, out.category, answers, model, 0, ttl_s)
+            try:
+                out = apply_rules(page.site, answers, self.config.classifier.thresholds_for(model))
+                return Decision(out.verdict, "cache", out.reason, out.category, answers, model, 0, ttl_s)
+            except (KeyError, TypeError):
+                pass  # cached under an older question set: ask again, and the put below replaces it
 
         try:
             state, questions = build_request(page, metadata or {})

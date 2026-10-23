@@ -1,12 +1,14 @@
 """Run every labeled item through each decision model and report against your labels.
 
-    uv run --project daemon bench/run_bench.py --env-file /etc/heimdall/secrets.env
-    uv run --project daemon bench/run_bench.py --models workers_ai:@cf/cloudflare/clef-flash \\
-        local_llamacpp:clef-flash@http://127.0.0.1:8081
+    uv run --project daemon bench/run_bench.py --env-file secrets.env     # the configured model
+    uv run --project daemon bench/run_bench.py --env-file secrets.env --models \\
+        openrouter:typesafe/jev-1.13 workers_ai:@cf/cloudflare/clef-flash  # compare models
 
 Requests are built and verdicts combined by the daemon's own code
 (questions.build_request, policy.apply_rules), so the numbers predict the
-daemon. Answers are cached in bench/data/results.jsonl; rerunning only calls
+daemon. Videos from allowlisted channels are allowed without a model call,
+as in the daemon; since the allowlist was picked from these labels, that part
+of the score is in-sample. Answers are cached in bench/data/results.jsonl; rerunning only calls
 the models for new labels. --fresh ignores the cache.
 
 Labels are lopsided (most of what you watch should be blocked), so accuracy
@@ -31,15 +33,10 @@ import httpx
 from heimdall import labels, pages
 from heimdall.config import Config, ProviderConfig, Thresholds, load_config
 from heimdall.models.systemone import SystemOneError, make_provider
-from heimdall.policy import apply_rules
+from heimdall.policy import ALLOW, RuleOutcome, allowlisted_channel, apply_rules
 from heimdall.questions import build_request
 
 DATA = Path(__file__).parent / "data"
-DEFAULT_MODELS = [
-    "workers_ai:@cf/cloudflare/clef-flash",
-    "openrouter:typesafe/jev-1.13",
-    "openrouter:microsoft/microsoft-decision-1",
-]
 REPO = Path(__file__).resolve().parents[1]
 GATE = {
     "false_allow": 0.05,  # share of block labels let through
@@ -47,7 +44,7 @@ GATE = {
     "min_labels": 30,     # per class and site; below this, rates move in big jumps
 }
 # The one score each site's rule thresholds on (policy.apply_rules).
-SCORE_KEY = {"youtube": "educational"}
+SCORE_KEY = {"youtube": "worth_learning"}
 
 
 @dataclass
@@ -58,6 +55,7 @@ class Item:
     state: object
     questions: dict
     key: str  # hash of the exact request, so changed questions invalidate the cache
+    allowlisted: bool  # channel is in rules.youtube.allow_channels: allowed, never sent to the model
 
 
 def parse_model(spec: str) -> ProviderConfig:
@@ -75,7 +73,7 @@ def load_env_file(path: Path) -> None:
             os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
-def build_items(rows: dict) -> tuple[list[Item], list[str]]:
+def build_items(rows: dict, config: Config) -> tuple[list[Item], list[str]]:
     items, skipped = [], []
     for row in rows.values():
         page = pages.parse(row["url"])
@@ -85,7 +83,8 @@ def build_items(rows: dict) -> tuple[list[Item], list[str]]:
             skipped.append(f"{row['id']}: {e}")
             continue
         key = hashlib.sha256(json.dumps([state, questions], sort_keys=True).encode()).hexdigest()[:16]
-        items.append(Item(row["id"], row["site"], row["label"], state, questions, key))
+        items.append(Item(row["id"], row["site"], row["label"], state, questions, key,
+                          allowlisted_channel(page, row["metadata"], config)))
     return items, skipped
 
 
@@ -140,10 +139,13 @@ def score(items: list[Item], results: dict, th: Thresholds) -> dict:
     allows = blocks = kept = false_allow = 0
     wrong = []
     for item in items:
-        rec = results.get(item.id)
-        if not rec or "error" in rec:
-            continue
-        verdict = apply_rules(item.site, rec["answers"], th)
+        if item.allowlisted:
+            verdict = RuleOutcome(ALLOW, "allowlisted channel", None)
+        else:
+            rec = results.get(item.id)
+            if not rec or "error" in rec:
+                continue
+            verdict = apply_rules(item.site, rec["answers"], th)
         if item.label == "allow":
             allows += 1
             kept += verdict.verdict == "allow"
@@ -208,7 +210,9 @@ def report(cfg: ProviderConfig, items: list[Item], results: dict, config: Config
         site_items = [i for i in items if i.site == site]
         key = SCORE_KEY[site]
         s = score(site_items, results, th)
-        print(f"  {site}: {s['allows']} allow / {s['blocks']} block labels")
+        listed = [i for i in site_items if i.allowlisted]
+        print(f"  {site}: {s['allows']} allow / {s['blocks']} block labels; allowlisted channels cover "
+              f"{sum(i.label == 'allow' for i in listed)} allows, {sum(i.label == 'block' for i in listed)} blocks")
         print(f"    config  {key} >= {getattr(th, key):.2f}: {fmt(s)}")
         points = frontier(site, site_items, results, th)
         for t, fs in points:
@@ -235,7 +239,7 @@ async def main_async(args) -> None:
     config = load_config(args.config)
     rows = labels.load(args.labels)
     rows = {k: r for k, r in rows.items() if r["site"] in SCORE_KEY}
-    items, skipped = build_items(rows)
+    items, skipped = build_items(rows, config)
     print(f"{len(items)} labeled items ({len(skipped)} skipped for thin metadata)")
     for s in skipped[:5]:
         print(f"  skipped {s}")
@@ -243,15 +247,18 @@ async def main_async(args) -> None:
         return
 
     cache = load_results(args.results)
-    for spec in args.models:
+    to_ask = [i for i in items if not i.allowlisted]
+    specs = args.models or [f"{config.classifier.provider}:{config.classifier.model}"]
+    for spec in specs:
         cfg = parse_model(spec)
-        results = await run_model(cfg, items, cache, args.results, args.concurrency, args.fresh)
+        results = await run_model(cfg, to_ask, cache, args.results, args.concurrency, args.fresh)
         report(cfg, items, results, config, args.show_errors)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--models", nargs="+", default=DEFAULT_MODELS, metavar="PROVIDER:MODEL[@URL]")
+    ap.add_argument("--models", nargs="+", metavar="PROVIDER:MODEL[@URL]",
+                    help="models to compare (default: the config's classifier)")
     ap.add_argument("--labels", type=Path, default=DATA / "labels.csv")
     ap.add_argument("--results", type=Path, default=DATA / "results.jsonl")
     ap.add_argument("--config", default=str(REPO / "config.example.yaml"),

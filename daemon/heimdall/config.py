@@ -22,7 +22,7 @@ class FocusWindow(BaseModel):
 
 
 class Thresholds(BaseModel):
-    educational: float = 0.81
+    worth_learning: float = 0.78
 
 
 class ProviderConfig(BaseModel):
@@ -60,6 +60,8 @@ class AppealsConfig(BaseModel):
 
 class SiteRules(BaseModel):
     block_paths: list[str] = []
+    # YouTube channel IDs (UC...) whose videos are allowed without a model call.
+    allow_channels: list[str] = []
 
 
 class Rules(BaseModel):

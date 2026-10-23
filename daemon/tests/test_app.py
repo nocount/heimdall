@@ -11,13 +11,13 @@ def make_client(config, answers=None):
 
 
 def test_classify_shadow(config):
-    client, app = make_client(config, yt_answers(content_type="gaming", conf=0.8, edu=0.2))
+    client, app = make_client(config, yt_answers(0.2))
     r = client.post("/v1/classify", json={"url": "https://www.youtube.com/watch?v=v1", "metadata": YT_META})
     body = r.json()
     assert r.status_code == 200
     assert body["verdict"] == "allow"
     assert body["would_verdict"] == "block"
-    assert body["reason"] == "only 20% educational (gaming (80%))"
+    assert body["reason"] == "rated only 20% worth learning from"
     assert body["shadow"] is True
     assert app.state.db.decision(body["decision_id"])["verdict"] == "block"
 

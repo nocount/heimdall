@@ -41,11 +41,14 @@ kind, and p99 latency within the daemon's timeout. Model answers are cached in
 `bench/data/results.jsonl`, so re-running after labeling more only calls the
 models for new items. Write the chosen thresholds into config.
 
-**Phase 0 outcome (2026-10-23, 10 allow / 143 block labels):** YouTube is
-judged on `educational` alone; gating on content type blocked the AI
-interviews and podcasts you allow. Jev is primary at `educational ≥ 0.81`
-(kept 7/10 allows, 0 false allows, p99 976ms), with Clef on Workers AI as
-the fallback at 0.76. Re-run once there are ≥30 allow labels.
+**Phase 0 outcome (2026-10-23, 23 allow / 173 block labels):** Jev answers
+one question per video ("worth watching for someone who wants to learn about
+AI, technology, or science?"), allowed at ≥ 0.78, and videos from channels in
+`rules.youtube.allow_channels` are allowed without a model call. Together:
+20/23 allows kept, 1/173 false allows. No fallback model: if OpenRouter is
+down, YouTube fails closed. X isn't classified at all; it's blocked outright.
+Re-run once there are ≥30 allow labels (retry failed fetches, or label real
+browsing with `heimdall review`).
 
 ## Phase 1: shadow mode
 

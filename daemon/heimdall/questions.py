@@ -10,33 +10,16 @@ from .pages import Page
 
 DESCRIPTION_CHARS = 1500
 
-YOUTUBE_CONTENT_TYPES = {
-    "tutorial_or_lecture": "Teaches a skill or subject step by step: tutorials, courses, lectures, walkthroughs",
-    "technical_talk": "A conference talk, paper explanation, or deep technical discussion",
-    "news": "Reports recent events or announcements",
-    "commentary_or_opinion": "Reactions, hot takes, drama, opinion pieces, podcasts mostly about opinions",
-    "entertainment": "Comedy, challenges, sketches, compilations, shows",
-    "gaming": "Gameplay, let's plays, game reviews or streams",
-    "music": "Music videos, songs, mixes",
-    "vlog": "Personal or lifestyle vlogs",
-    "other": None,
-}
-
-
 def youtube_questions() -> dict:
+    """One question per video. Phase 0 tried content_type + educational +
+    clickbait_mismatch, then ai_related + substantive; this single question
+    separated the labels best (leave-one-out: 16/23 allows kept vs 8/23 for
+    educational) at a third of the request size."""
     return {
-        "content_type": {
-            "type": "choice",
-            "instructions": "What kind of video is `video`?",
-            "criteria": YOUTUBE_CONTENT_TYPES,
-        },
-        "educational": {
+        "worth_learning": {
             "type": "noul",
-            "instructions": "Would watching `video` primarily teach a skill or substantive knowledge, rather than entertain?",
-        },
-        "clickbait_mismatch": {
-            "type": "noul",
-            "instructions": "Does the title of `video` promise something educational that its description suggests it is not?",
+            "instructions": "Would `video` be worth watching for someone who wants to learn about AI, "
+                            "technology, or science, rather than to be entertained?",
         },
     }
 

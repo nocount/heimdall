@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     page_type     TEXT NOT NULL,
     item_id       TEXT,
     metadata      TEXT,
-    source        TEXT NOT NULL,   -- schedule | grant | rule | cache | model | error
+    source        TEXT NOT NULL,   -- schedule | grant | rule | channel | cache | model | error
     model         TEXT,
     probs         TEXT,            -- raw answers JSON from the decision model
     verdict       TEXT NOT NULL,   -- what the policy decided (the would-be verdict in shadow)

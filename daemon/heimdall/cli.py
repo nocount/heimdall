@@ -43,7 +43,8 @@ def cmd_status(args) -> None:
 def _summary(row) -> str:
     meta = json.loads(row["metadata"] or "null") or {}
     if row["site"] == "youtube":
-        lines = [f"{meta.get('title', '?')}  —  {meta.get('channel', '?')}  [{meta.get('category', '?')}]"]
+        lines = [f"{meta.get('title', '?')}  —  {meta.get('channel', '?')} ({meta.get('channel_id', '?')})"
+                 f"  [{meta.get('category', '?')}]"]
         if desc := (meta.get("description") or "").strip():
             lines.append(textwrap.shorten(desc, 220))
     else:

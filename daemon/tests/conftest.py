@@ -11,13 +11,8 @@ FOCUS = datetime(2026, 10, 21, 17, 0, tzinfo=timezone.utc)
 EVENING = datetime(2026, 10, 22, 3, 0, tzinfo=timezone.utc)
 
 
-def yt_answers(content_type="tutorial_or_lecture", conf=0.9, edu=0.9):
-    return {
-        "content_type": {"type": "choice", "choice": content_type, "confidence": conf,
-                         "probabilities": {content_type: conf}},
-        "educational": {"type": "noul", "noul": edu},
-        "clickbait_mismatch": {"type": "noul", "noul": 0.1},
-    }
+def yt_answers(worth=0.9):
+    return {"worth_learning": {"type": "noul", "noul": worth}}
 
 
 class FakeClassifier:
@@ -46,6 +41,7 @@ def config(tmp_path):
 
 
 YT_META = {
+    "channel_id": "UCuniversity",
     "title": "Building a Transformer from Scratch — Lecture 4",
     "channel": "Some University",
     "category": "Education",
