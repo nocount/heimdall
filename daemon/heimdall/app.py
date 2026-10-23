@@ -15,8 +15,10 @@ from pydantic import BaseModel
 from . import __version__
 from .config import Config, load_config
 from .db import DB, iso
+from .models.appeals import AppealJudge
 from .models.systemone import Classifier, make_provider
-from .policy import Policy
+from .pages import appealable, parse
+from .policy import AppealRejected, Policy
 
 log = logging.getLogger("heimdall")
 
@@ -24,6 +26,11 @@ log = logging.getLogger("heimdall")
 class ClassifyRequest(BaseModel):
     url: str
     metadata: dict | None = None
+
+
+class AppealRequest(BaseModel):
+    decision_id: int
+    justification: str
 
 
 class HeartbeatRequest(BaseModel):
@@ -35,8 +42,16 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def make_judge(config: Config) -> AppealJudge | None:
+    try:
+        return AppealJudge(config.appeals)
+    except Exception as e:  # e.g. no Anthropic credentials: run, but refuse appeals
+        log.warning("appeals disabled: %s", e)
+        return None
+
+
 def create_app(config: Config | None = None, classifier: Classifier | None = None,
-               clock=utcnow) -> FastAPI:
+               clock=utcnow, judge: AppealJudge | None = None) -> FastAPI:
     config = config or load_config()
     db = DB(config.db_path)
     http = httpx.AsyncClient()
@@ -46,7 +61,7 @@ def create_app(config: Config | None = None, classifier: Classifier | None = Non
             make_provider(config.classifier, http),
             make_provider(fallback, http) if fallback else None,
         )
-    policy = Policy(config, db, classifier)
+    policy = Policy(config, db, classifier, judge if judge is not None else make_judge(config))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -89,7 +104,17 @@ def create_app(config: Config | None = None, classifier: Classifier | None = Non
             "category": d.category,
             "probs": d.answers,
             "ttl": d.ttl_s,
+            "expires_at": d.expires_at,
+            "appealable": appealable(parse(req.url)),
         }
+
+    @app.post("/v1/appeal")
+    async def appeal(req: AppealRequest):
+        try:
+            return await policy.appeal(req.decision_id, req.justification, clock())
+        except AppealRejected as e:
+            body = {"detail": e.detail, "retry_after_s": e.retry_after_s}
+            return JSONResponse(body, status_code=e.status)
 
     @app.post("/v1/heartbeat")
     def heartbeat(req: HeartbeatRequest):
@@ -113,6 +138,11 @@ def create_app(config: Config | None = None, classifier: Classifier | None = Non
                 "fallback": classifier.fallback.label if classifier.fallback else None,
             },
             "rules": config.rules.model_dump(),
+            "appeals": {
+                "enabled": policy.judge is not None,
+                "min_words": config.appeals.min_words,
+                "left_today": policy.appeals_left(now),
+            },
             "last_heartbeat": db.last_heartbeat(),
         }
 

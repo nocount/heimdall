@@ -90,6 +90,18 @@ def host_matches(host: str, domains: list[str]) -> bool:
     return any(host == d or host.endswith("." + d) for d in (d.lower().strip(".") for d in domains))
 
 
+# Feeds and Shorts can't be appealed: a grant opens one page, and on these that
+# page is the endless scroll itself.
+NOT_APPEALABLE = {
+    "youtube": {"home", "shorts", "feed"},
+    "x": {"home", "explore", "notifications", "list", "root"},
+}
+
+
+def appealable(page: Page) -> bool:
+    return page.page_type not in NOT_APPEALABLE.get(page.site, set())
+
+
 # Page types that need the classifier; everything else is decided by rules.
 # X isn't classified: it's in hard_block_domains, and appeals open single pages.
 MODEL_PAGE_TYPES = {

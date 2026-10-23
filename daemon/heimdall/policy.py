@@ -10,19 +10,26 @@
 
 Every evaluation is logged. In shadow mode the extension is always told
 "allow" and the would-be verdict is logged.
+
+Blocked pages can be appealed (except feeds and Shorts): the appeal judge
+reads a one-sentence justification, and a grant opens that one page for 10-40
+minutes. The limits around it (length, daily cap, cooldown, max grant) are
+enforced here, not by the model.
 """
 
 from __future__ import annotations
 
 import fnmatch
 import logging
+import json
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from . import pages
 from .cache import AnswerCache
 from .config import Config, Thresholds
 from .db import DB, iso
+from .models.appeals import AppealCase, AppealJudge, AppealJudgeError
 from .models.systemone import Classifier, SystemOneError
 from .pages import Page
 from .questions import build_request
@@ -43,6 +50,7 @@ class Decision:
     model: str | None = None
     latency_ms: int | None = None
     ttl_s: int = 0  # how long the extension may trust this verdict for the tab
+    expires_at: str | None = None  # for grants: when the extension must re-check the tab
 
 
 @dataclass
@@ -93,13 +101,22 @@ def static_rule(page: Page, config: Config) -> tuple[str, str] | None:
     return ALLOW, f"{page.site} {page.page_type} pages are allowed"
 
 
+class AppealRejected(Exception):
+    """An appeal refused before or instead of judging. `status` maps to HTTP."""
+
+    def __init__(self, status: int, detail: str, retry_after_s: int | None = None):
+        super().__init__(detail)
+        self.status, self.detail, self.retry_after_s = status, detail, retry_after_s
+
+
 class Policy:
-    def __init__(self, config: Config, db: DB, classifier: Classifier):
+    def __init__(self, config: Config, db: DB, classifier: Classifier, judge: AppealJudge | None = None):
         self.config = config
         self.db = db
         self.schedule = Schedule(config)
         self.cache = AnswerCache(db, config.cache_ttl_days)
         self.classifier = classifier
+        self.judge = judge
 
     def _grant_key(self, page: Page) -> str:
         return page.item_id or page.url
@@ -108,8 +125,8 @@ class Policy:
         if not self.schedule.is_focus(now):
             return Decision(ALLOW, "schedule", "outside focus hours")
 
-        if self.db.active_grant(page.site, self._grant_key(page), now):
-            return Decision(ALLOW, "grant", "granted on appeal")
+        if expires := self.db.active_grant(page.site, self._grant_key(page), now):
+            return Decision(ALLOW, "grant", "granted on appeal", expires_at=expires)
 
         if (static := static_rule(page, self.config)) is not None:
             verdict, reason = static
@@ -167,3 +184,77 @@ class Policy:
                  decision.verdict, " [shadow]" if self.config.shadow else "", decision.source,
                  decision.reason)
         return decision_id, decision, served
+
+    # appeals
+
+    def _day_start(self, now: datetime) -> datetime:
+        return self.schedule.local(now).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def appeals_left(self, now: datetime) -> int:
+        used = len(self.db.appeals_since(self._day_start(now)))
+        return max(0, self.config.appeals.max_per_day - used)
+
+    async def appeal(self, decision_id: int, justification: str, now: datetime) -> dict:
+        cfg = self.config.appeals
+        row = self.db.decision(decision_id)
+        if row is None:
+            raise AppealRejected(404, "unknown decision")
+        page = pages.parse(row["url"])
+        if row["verdict"] != BLOCK:
+            raise AppealRejected(409, "that page wasn't blocked")
+        if not pages.appealable(page):
+            raise AppealRejected(403, "feeds and Shorts can't be appealed")
+        if not self.schedule.is_focus(now):
+            raise AppealRejected(409, "focus hours are over; just reload the page")
+
+        justification = " ".join(justification.split())
+        if len(justification.split()) < cfg.min_words:
+            raise AppealRejected(422, f"say why in at least {cfg.min_words} words")
+
+        today = self.db.appeals_since(self._day_start(now))
+        if len(today) >= cfg.max_per_day:
+            raise AppealRejected(429, f"no appeals left today ({cfg.max_per_day} used)")
+
+        key = self._grant_key(page)
+        if denied_at := self.db.last_denial(page.site, key):
+            until = datetime.fromisoformat(denied_at) + timedelta(minutes=cfg.deny_cooldown_min)
+            if until > now:
+                wait = int((until - now).total_seconds()) + 1
+                raise AppealRejected(429, f"appeal denied recently; try again in {wait // 60 + 1} min", wait)
+
+        if self.judge is None:
+            raise AppealRejected(503, "appeals aren't configured")
+        case = AppealCase(
+            url=row["url"], page=f"{page.site} {page.page_type}",
+            metadata=json.loads(row["metadata"]) if row["metadata"] else None,
+            block_reason=row["reason"] or "", justification=justification,
+            today=[{"justification": a["justification"], "granted": bool(a["granted"]), "url": a["url"]}
+                   for a in today],
+        )
+        try:
+            verdict, record = await self.judge.judge(case)
+        except AppealJudgeError as e:
+            # Not counted against the daily cap: the judge, not the user, failed.
+            log.error("%s", e)
+            raise AppealRejected(503, "the appeal judge is unavailable right now") from e
+
+        minutes = min(verdict.minutes, cfg.max_grant_min) if verdict.grant else None
+        appeal_id = self.db.add_appeal(ts=now, decision_id=decision_id, justification=justification,
+                                       model_output=record, granted=verdict.grant, minutes=minutes,
+                                       site=page.site, key=key)
+        expires_at = None
+        if verdict.grant:
+            expires = now + timedelta(minutes=minutes)
+            self.db.add_grant(page.site, key, expires, appeal_id)
+            expires_at = iso(expires)
+        log.info("appeal #%d on decision #%d %s: %s (%s)", appeal_id, decision_id,
+                 "GRANTED %d min" % minutes if verdict.grant else "denied", justification, verdict.message)
+        return {
+            "granted": verdict.grant,
+            "minutes": minutes,
+            "message": verdict.message,
+            "expires_at": expires_at,
+            "url": row["url"],
+            "appeals_left": max(0, cfg.max_per_day - len(today) - 1),
+            "cooldown_s": None if verdict.grant else cfg.deny_cooldown_min * 60,
+        }

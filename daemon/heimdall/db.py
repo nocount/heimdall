@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS appeals (
     justification  TEXT NOT NULL,
     model_output   TEXT,
     granted        INTEGER NOT NULL,
-    minutes        INTEGER
+    minutes        INTEGER,
+    site           TEXT,
+    key            TEXT              -- same key as grants: item id when known, else the URL
 );
 
 CREATE TABLE IF NOT EXISTS grants (
@@ -83,6 +85,17 @@ class DB:
         with self.lock:
             self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.executescript(SCHEMA)
+            self._migrate()
+
+    def _migrate(self) -> None:
+        """Add columns introduced after a database was first created."""
+        added = {"appeals": [("site", "TEXT"), ("key", "TEXT")]}
+        for table, cols in added.items():
+            have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+            for name, decl in cols:
+                if name not in have:
+                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+        self.conn.commit()
 
     def execute(self, sql: str, params=()) -> sqlite3.Cursor:
         with self.lock, self.conn:
@@ -129,10 +142,36 @@ class DB:
 
     # grants
 
-    def active_grant(self, site: str, key: str, now: datetime) -> bool:
-        rows = self.query("SELECT 1 FROM grants WHERE site = ? AND key = ? AND expires_at > ? LIMIT 1",
+    def active_grant(self, site: str, key: str, now: datetime) -> str | None:
+        """The latest expiry of a live grant for this page, or None."""
+        rows = self.query("SELECT MAX(expires_at) AS e FROM grants WHERE site = ? AND key = ? AND expires_at > ?",
                           (site, key, iso(now)))
-        return bool(rows)
+        return rows[0]["e"] if rows else None
+
+    def add_grant(self, site: str, key: str, expires_at: datetime, appeal_id: int) -> None:
+        self.execute("INSERT INTO grants (site, key, expires_at, appeal_id) VALUES (?, ?, ?, ?)",
+                     (site, key, iso(expires_at), appeal_id))
+
+    # appeals
+
+    def add_appeal(self, *, ts: datetime, decision_id: int, justification: str, model_output: dict | None,
+                   granted: bool, minutes: int | None, site: str, key: str) -> int:
+        cur = self.execute(
+            "INSERT INTO appeals (ts, decision_id, justification, model_output, granted, minutes, site, key) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (iso(ts), decision_id, justification, json.dumps(model_output) if model_output else None,
+             int(granted), minutes, site, key),
+        )
+        return cur.lastrowid
+
+    def appeals_since(self, since: datetime) -> list[sqlite3.Row]:
+        return self.query(
+            "SELECT a.*, d.url FROM appeals a LEFT JOIN decisions d ON d.id = a.decision_id "
+            "WHERE a.ts >= ? ORDER BY a.id", (iso(since),))
+
+    def last_denial(self, site: str, key: str) -> str | None:
+        rows = self.query("SELECT MAX(ts) AS t FROM appeals WHERE site = ? AND key = ? AND granted = 0", (site, key))
+        return rows[0]["t"] if rows else None
 
     # heartbeats
 

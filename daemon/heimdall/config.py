@@ -50,12 +50,23 @@ class ClassifierConfig(ProviderConfig):
         return self.thresholds
 
 
+DEFAULT_FOCUS_RULES = """\
+During focus hours I want to work. On YouTube I only watch videos that help me
+learn about AI, technology or science: lectures, talks, expert interviews and
+in-depth analysis, not entertainment, gaming, reactions or hype. X is blocked
+outright because its feeds are a time sink; I open a specific post or profile
+only when I have a concrete reason."""
+
+
 class AppealsConfig(BaseModel):
     model: str = "claude-haiku-5-5"
     min_words: int = 8
     max_per_day: int = 5
     deny_cooldown_min: int = 10
     max_grant_min: int = 40
+    timeout_s: float = 20
+    # What the judge is told you want from focus hours, in your own words.
+    focus_rules: str = DEFAULT_FOCUS_RULES
 
 
 class SiteRules(BaseModel):
