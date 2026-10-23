@@ -1,0 +1,3 @@
+label,url,author,text,quoted_text
+allow,https://x.com/example/status/1000000000000000001,@example,"We found that scaling the KV cache in fp8 loses <0.1 ppl on long-context evals. Paper + code below.",
+block,https://x.com/example/status/1000000000000000002,@example,"cannot believe this happened at the game last night 😂",

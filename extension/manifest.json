@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "heimdall",
+  "version": "0.1.0",
+  "description": "Content-aware focus filter for YouTube and X. Talks only to the local heimdall daemon.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "heimdall@nocount",
+      "strict_min_version": "136.0",
+      "data_collection_permissions": {
+        "required": ["browsingActivity", "websiteContent"]
+      }
+    }
+  },
+  "permissions": ["tabs", "webNavigation", "storage", "alarms"],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "*://x.com/*",
+    "*://*.x.com/*",
+    "*://twitter.com/*",
+    "*://*.twitter.com/*",
+    "http://127.0.0.1:7878/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_title": "heimdall"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["page/yt-bridge.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["content/common.js", "content/youtube.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["*://x.com/*", "*://*.x.com/*", "*://twitter.com/*", "*://*.twitter.com/*"],
+      "js": ["content/common.js", "content/x.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

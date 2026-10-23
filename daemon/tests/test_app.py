@@ -43,6 +43,17 @@ def test_web_origins_refused(config):
     assert r.status_code == 200
 
 
+def test_extension_preflight(config):
+    client, _ = make_client(config)
+    headers = {"Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type"}
+    r = client.options("/v1/classify", headers={"Origin": "moz-extension://1234-abcd", **headers})
+    assert r.status_code == 200
+    assert r.headers["access-control-allow-origin"] == "moz-extension://1234-abcd"
+    r = client.options("/v1/classify", headers={"Origin": "https://evil.example", **headers})
+    assert r.status_code == 403
+    assert "access-control-allow-origin" not in r.headers
+
+
 def test_text_plain_body_rejected(config):
     # A web page's "simple" no-cors request can only send text/plain. FastAPI
     # must not parse it as JSON, or the origin check would be the only guard.

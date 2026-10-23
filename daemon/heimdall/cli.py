@@ -26,7 +26,8 @@ def cmd_serve(args) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     app = create_app(load_config(args.config))
     # Never bind anything but loopback: the API has no auth beyond the origin check.
-    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="info" if args.access_log else "warning",
+                access_log=args.access_log)
 
 
 def cmd_status(args) -> None:
@@ -98,7 +99,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--port", type=int, default=int(os.environ.get("HEIMDALL_PORT", 7878)))
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("serve", help="run the daemon on 127.0.0.1").set_defaults(func=cmd_serve)
+    s = sub.add_parser("serve", help="run the daemon on 127.0.0.1")
+    s.add_argument("--access-log", action="store_true", help="log every request (noisy: heartbeats)")
+    s.set_defaults(func=cmd_serve)
     sub.add_parser("status", help="show daemon status").set_defaults(func=cmd_status)
 
     r = sub.add_parser("review", help="review recent model decisions and label mistakes")

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 import httpx
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -55,6 +56,15 @@ def create_app(config: Config | None = None, classifier: Classifier | None = Non
     app = FastAPI(title="heimdall", version=__version__, lifespan=lifespan)
     app.state.config, app.state.db, app.state.policy = config, db, policy
 
+    # Firefox preflights the extension's JSON POSTs to loopback despite its
+    # host permission, so answer CORS, but only for extension origins.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"moz-extension://[0-9a-f-]+",
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type"],
+    )
+
     @app.middleware("http")
     async def only_extension_origins(request: Request, call_next):
         # Any web page can fire requests at 127.0.0.1. Browsers always attach
@@ -62,6 +72,7 @@ def create_app(config: Config | None = None, classifier: Classifier | None = Non
         # from an extension. No Origin means curl or the CLI.
         origin = request.headers.get("origin")
         if origin is not None and not origin.startswith("moz-extension://"):
+            log.warning("refused %s %s from origin %r", request.method, request.url.path, origin)
             return JSONResponse({"detail": "forbidden origin"}, status_code=403)
         return await call_next(request)
 

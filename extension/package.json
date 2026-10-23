@@ -1,0 +1,15 @@
+{
+  "name": "heimdall-extension",
+  "private": true,
+  "scripts": {
+    "lint": "web-ext lint",
+    "start": "web-ext run --firefox-profile ../web-ext-profile --profile-create-if-missing --keep-profile-changes --start-url https://www.youtube.com --start-url https://x.com",
+    "build": "web-ext build --overwrite-dest"
+  },
+  "devDependencies": {
+    "web-ext": "^8.0.0"
+  },
+  "webExt": {
+    "ignoreFiles": ["package.json", "package-lock.json"]
+  }
+}
