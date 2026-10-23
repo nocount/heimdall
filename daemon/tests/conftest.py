@@ -20,14 +20,6 @@ def yt_answers(content_type="tutorial_or_lecture", conf=0.9, edu=0.9):
     }
 
 
-def x_answers(ai=0.9, content_type="technical"):
-    return {
-        "ai_related": {"type": "noul", "noul": ai},
-        "content_type": {"type": "choice", "choice": content_type, "confidence": 0.8,
-                         "probabilities": {content_type: 0.8}},
-    }
-
-
 class FakeClassifier:
     """Stands in for systemone.Classifier: returns canned answers, records calls."""
 

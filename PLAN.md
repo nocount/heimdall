@@ -198,10 +198,10 @@ Evaluated in order. The first match wins.
 5. **Model call** with the atomic questions (section 7). Then the code applies the rules:
    - YouTube allow requires `P(educational) ≥ θ_edu`. `content_type` only names the category in the block reason.
      - *Changed after Phase 0.* The original rule also required `content_type ∈ {tutorial_or_lecture, technical_talk}` and `confidence ≥ θ_conf`. That blocked 8 of 10 allow labels, which were AI interviews and podcasts that the models correctly call commentary or news. Clef's `confidence` also isn't P(choice): a tutorial at P = 0.95 had confidence 0.54.
-   - X allow requires `P(ai_related) ≥ θ_ai`.
+   - X: not classified. *Changed after Phase 0:* X is in `hard_block_domains`, so every X page is blocked during focus hours, and a granted appeal opens one post, profile or search.
 6. **Model error or timeout → block.** The block is appealable, and the reason is marked "classifier unavailable".
 
-The thresholds (`θ`) are set from Phase 0 data, not guessed. Each classifier provider has its own, because the models aren't calibrated alike. Jev: `θ_edu = 0.81`; Clef (fallback): `θ_edu = 0.76`. `θ_ai = 0.7` is untested until there are X labels.
+The thresholds (`θ`) are set from Phase 0 data, not guessed. Each classifier provider has its own, because the models aren't calibrated alike. Jev: `θ_edu = 0.81`; Clef (fallback): `θ_edu = 0.76`.
 
 ---
 

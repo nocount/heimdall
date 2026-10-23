@@ -7,7 +7,7 @@ from heimdall.config import Config, ProviderConfig, Thresholds
 from heimdall.db import DB, iso
 from heimdall.policy import Policy, apply_rules
 
-from .conftest import EVENING, FOCUS, YT_META, FakeClassifier, x_answers, yt_answers
+from .conftest import EVENING, FOCUS, YT_META, FakeClassifier, yt_answers
 
 WATCH = "https://www.youtube.com/watch?v=abc123"
 TWEET = "https://x.com/someone/status/111"
@@ -18,7 +18,7 @@ def make(config, **kw):
     return Policy(config, DB(config.db_path), clf), clf
 
 
-TH = Thresholds(educational=0.81, ai_related=0.7)
+TH = Thresholds(educational=0.81)
 
 
 @pytest.mark.parametrize("answers,verdict", [
@@ -37,11 +37,6 @@ def test_youtube_rules(answers, verdict):
 def test_rule_reason_names_category():
     out = apply_rules("youtube", yt_answers(content_type="entertainment", conf=0.87, edu=0.12), TH)
     assert out.reason == "only 12% educational (entertainment (87%))"
-
-
-@pytest.mark.parametrize("ai,verdict", [(0.9, "allow"), (0.7, "allow"), (0.69, "block")])
-def test_x_rules(ai, verdict):
-    assert apply_rules("x", x_answers(ai=ai), TH).verdict == verdict
 
 
 def test_fallback_answers_use_fallback_thresholds():
@@ -100,11 +95,39 @@ async def test_cache_reapplies_thresholds(config):
 
 
 async def test_cache_expires(config):
-    policy, clf = make(config, answers=x_answers())
-    meta = {"author": "@someone", "text": "new attention variant"}
-    await policy.evaluate(TWEET, meta, FOCUS)
-    await policy.evaluate(TWEET, meta, FOCUS + timedelta(days=1, minutes=1))
+    policy, clf = make(config, answers=yt_answers())
+    await policy.evaluate(WATCH, YT_META, FOCUS)
+    await policy.evaluate(WATCH, YT_META, FOCUS + timedelta(days=30, minutes=1))
     assert len(clf.calls) == 2
+
+
+@pytest.mark.parametrize("url", [
+    TWEET, "https://x.com/karpathy", "https://x.com/search?q=llm", "https://twitter.com/home",
+    "https://x.com/messages", "https://mobile.x.com/someone/status/222",
+])
+async def test_x_blocked_without_model(config, url):
+    policy, clf = make(config, answers=yt_answers())
+    _, d, _ = await policy.evaluate(url, {"author": "@someone", "text": "attention is all you need"}, FOCUS)
+    assert (d.verdict, d.source) == ("block", "rule")
+    assert clf.calls == []
+
+
+async def test_x_grant_opens_one_post(config):
+    policy, _ = make(config)
+    policy.db.execute("INSERT INTO grants (site, key, expires_at) VALUES (?, ?, ?)",
+                      ("x", "111", iso(FOCUS + timedelta(minutes=10))))
+    _, d, _ = await policy.evaluate(TWEET, None, FOCUS)
+    assert (d.verdict, d.source) == ("allow", "grant")
+    _, d, _ = await policy.evaluate("https://x.com/someone/status/999", None, FOCUS)
+    assert d.verdict == "block"
+
+
+async def test_x_allowed_if_removed_from_hard_block(config):
+    config.rules.hard_block_domains = []
+    policy, clf = make(config)
+    _, d, _ = await policy.evaluate(TWEET, None, FOCUS)
+    assert (d.verdict, d.reason) == ("allow", "not a filtered site")
+    assert clf.calls == []
 
 
 async def test_model_error_fails_closed(config):

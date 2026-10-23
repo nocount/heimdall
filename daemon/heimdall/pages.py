@@ -91,7 +91,7 @@ def host_matches(host: str, domains: list[str]) -> bool:
 
 
 # Page types that need the classifier; everything else is decided by rules.
+# X isn't classified: it's in hard_block_domains, and appeals open single pages.
 MODEL_PAGE_TYPES = {
     "youtube": {"watch"},
-    "x": {"status", "profile", "search"},
 }

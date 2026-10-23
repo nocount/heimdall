@@ -2,7 +2,7 @@
 
 1. outside focus window      -> allow
 2. active grant for the page -> allow
-3. static rules              -> block feeds/shorts/timelines, allow browse surfaces
+3. static rules              -> block X, feeds and shorts; allow browse surfaces
 4. cached model answers      -> re-apply rules
 5. model call                -> apply rules
 6. model error / no metadata -> block (fail closed)
@@ -76,13 +76,6 @@ def apply_rules(site: str, answers: dict, th: Thresholds) -> RuleOutcome:
             return RuleOutcome(ALLOW, f"{_pct(edu)} educational ({category})", category, details)
         return RuleOutcome(BLOCK, f"only {_pct(edu)} educational ({category})", category, details)
 
-    if site == "x":
-        ai = answers["ai_related"]["noul"]
-        details = {"ai_related": ai, "content_type": choice}
-        if ai >= th.ai_related:
-            return RuleOutcome(ALLOW, f"{_pct(ai)} AI-related ({category})", category, details)
-        return RuleOutcome(BLOCK, f"only {_pct(ai)} AI-related ({category})", category, details)
-
     raise ValueError(f"no rules for site {site}")
 
 
@@ -93,7 +86,7 @@ def static_rule(page: Page, config: Config) -> tuple[str, str] | None:
         return ALLOW, "always-allowed domain"
     if pages.host_matches(page.host, rules.hard_block_domains):
         return BLOCK, f"{page.host} is blocked during focus hours"
-    if page.site == "other":
+    if page.site not in pages.MODEL_PAGE_TYPES:
         return ALLOW, "not a filtered site"
 
     site_rules = getattr(rules, page.site)
@@ -127,7 +120,7 @@ class Policy:
             verdict, reason = static
             return Decision(verdict, "rule", reason, ttl_s=300)
 
-        ttl_s = 300 if page.site == "x" else 3600
+        ttl_s = 3600
 
         if (hit := self.cache.get(page, now)) is not None:
             model, answers = hit

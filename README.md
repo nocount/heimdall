@@ -1,8 +1,9 @@
 # heimdall
 
 Watcher app for managing social platform use during focus hours: a Firefox
-extension plus a local daemon that judge YouTube and X pages by their content
-(decision model on Workers AI), not by domain. See [PLAN.md](PLAN.md) for the design.
+extension plus a local daemon that judge YouTube videos by their content (a
+decision model), not by domain. X is blocked outright during focus hours; an
+appeal (Phase 2) opens a single post or profile. See [PLAN.md](PLAN.md) for the design.
 
 **Status:** Phase 0 (bench) and Phase 1 (shadow mode) are built. Nothing is
 blocked yet; the daemon logs what it *would* have done.
@@ -30,13 +31,11 @@ OPENROUTER_API_KEY=...    # primary classifier (Jev); Workers AI Clef is the fal
 uv run --project daemon bench/export_history.py          # YouTube /watch visits, last 60 days
 uv run --project daemon bench/fetch_meta.py              # metadata via yt-dlp (resumable)
 uv run --project daemon bench/label.py                   # a/b/s per video; likely allows come first
-uv run --project daemon bench/label.py --x-csv bench/data/x_samples.csv   # format: x_samples.example.csv
 uv run --project daemon bench/run_bench.py --env-file secrets.env --show-errors
 ```
 
 `run_bench.py` builds requests and combines answers with the daemon's own code.
-Accuracy is useless on a history that's mostly blockable, so per site it
-reports how many allow labels each threshold keeps at each false-allow count,
+Accuracy is useless on a history that's mostly blockable, so it reports how many allow labels each threshold keeps at each false-allow count,
 and gates on keeping ≥75% of allows with ≤5% false allows, ≥30 labels of each
 kind, and p99 latency within the daemon's timeout. Model answers are cached in
 `bench/data/results.jsonl`, so re-running after labeling more only calls the

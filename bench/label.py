@@ -1,7 +1,6 @@
 """Terminal labeler: allow or block each fetched video, appending to bench/data/labels.csv.
 
     uv run --project daemon bench/label.py              # label videos from meta.jsonl
-    uv run --project daemon bench/label.py --x-csv bench/data/x_samples.csv
 
 Keys: a = allow, b = block, s = skip, d = full description, q = quit.
 Label as you'd want heimdall to decide during focus hours.
@@ -14,13 +13,12 @@ category, length and title/tag keywords); --order recent follows the history.
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import textwrap
 from collections import Counter
 from pathlib import Path
 
-from heimdall import labels, pages
+from heimdall import labels
 
 DATA = Path(__file__).parent / "data"
 MIN_PER_CLASS = 30  # matches run_bench's GATE["min_labels"]
@@ -104,36 +102,14 @@ def label_videos(args) -> None:
         print(f"  -> {label}.  Tally: {tally(existing)}")
 
 
-def import_x(args) -> None:
-    """CSV columns: label,url,author,text,quoted_text (url must be a /status/ link)."""
-    added = 0
-    with args.x_csv.open(newline="") as f:
-        for i, row in enumerate(csv.DictReader(f), 2):
-            page = pages.parse(row["url"])
-            if page.page_type != "status":
-                print(f"line {i}: skipping, not a post URL: {row['url']}")
-                continue
-            labels.append(
-                args.labels, id=labels.label_id("x", page.item_id, row["url"]), site="x",
-                label=row["label"].strip().lower(), source="bench", url=row["url"],
-                metadata={k: row.get(k) or None for k in ("author", "text", "quoted_text")},
-            )
-            added += 1
-    print(f"imported {added} X samples. Tally: {tally(labels.load(args.labels))}")
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--meta", type=Path, default=DATA / "meta.jsonl")
     ap.add_argument("--labels", type=Path, default=DATA / "labels.csv")
-    ap.add_argument("--x-csv", type=Path, help="import hand-collected X samples instead")
     ap.add_argument("--order", choices=["likely", "recent"], default="likely",
                     help="likely allows first (default), or history order")
     args = ap.parse_args()
-    if args.x_csv:
-        import_x(args)
-    else:
-        label_videos(args)
+    label_videos(args)
 
 
 if __name__ == "__main__":

@@ -47,7 +47,7 @@ GATE = {
     "min_labels": 30,     # per class and site; below this, rates move in big jumps
 }
 # The one score each site's rule thresholds on (policy.apply_rules).
-SCORE_KEY = {"youtube": "educational", "x": "ai_related"}
+SCORE_KEY = {"youtube": "educational"}
 
 
 @dataclass
@@ -164,7 +164,7 @@ def frontier(site: str, items: list[Item], results: dict, base: Thresholds) -> l
     """For each false-allow count up to the gate's budget, the lowest threshold
     that stays within it (keeping the most allows), and its scores."""
     key = SCORE_KEY[site]
-    lo = 0.30 if site == "x" else 0.50
+    lo = 0.50
     scored = [(t, score(items, results, base.model_copy(update={key: t})))
               for t in (round(lo + i / 100, 2) for i in range(int(round((1 - lo) * 100))))]
     budget = int(GATE["false_allow"] * max(s["blocks"] for _, s in scored))
@@ -234,8 +234,7 @@ def report(cfg: ProviderConfig, items: list[Item], results: dict, config: Config
 async def main_async(args) -> None:
     config = load_config(args.config)
     rows = labels.load(args.labels)
-    if args.site:
-        rows = {k: r for k, r in rows.items() if r["site"] == args.site}
+    rows = {k: r for k, r in rows.items() if r["site"] in SCORE_KEY}
     items, skipped = build_items(rows)
     print(f"{len(items)} labeled items ({len(skipped)} skipped for thin metadata)")
     for s in skipped[:5]:
@@ -258,7 +257,6 @@ def main() -> None:
     ap.add_argument("--config", default=str(REPO / "config.example.yaml"),
                     help="config whose thresholds and timeouts to score against (default: config.example.yaml)")
     ap.add_argument("--env-file", type=Path, help="KEY=VALUE secrets file, e.g. secrets.env")
-    ap.add_argument("--site", choices=["youtube", "x"])
     ap.add_argument("--concurrency", type=int, default=4)
     ap.add_argument("--fresh", action="store_true", help="ignore cached answers")
     ap.add_argument("--show-errors", action="store_true", help="list misjudged items")

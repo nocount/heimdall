@@ -10,7 +10,6 @@ __pycache__/
 # Personal browsing data: labels, history exports, bench results
 bench/data/*
 !bench/data/.gitkeep
-!bench/data/x_samples.example.csv
 
 # Local overrides
 config.local.yaml

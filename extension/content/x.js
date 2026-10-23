@@ -1,5 +1,7 @@
-// X: report every page; on single posts, profiles and search, include the text
-// the classifier needs. X's markup changes often: every selector lives in SEL.
+// X: report every page; on single posts and profiles, include their text. The
+// daemon blocks X by rule without classifying it; the text is logged with the
+// decision as context for an appeal. X's markup changes often: every selector
+// lives in SEL.
 
 (() => {
   const SEL = {

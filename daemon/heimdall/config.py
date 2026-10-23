@@ -23,7 +23,6 @@ class FocusWindow(BaseModel):
 
 class Thresholds(BaseModel):
     educational: float = 0.81
-    ai_related: float = 0.7
 
 
 class ProviderConfig(BaseModel):
@@ -65,8 +64,8 @@ class SiteRules(BaseModel):
 
 class Rules(BaseModel):
     youtube: SiteRules = SiteRules(block_paths=["/", "/shorts/*", "/feed/*"])
-    x: SiteRules = SiteRules(block_paths=["/home", "/explore", "/notifications", "/i/lists/*"])
-    hard_block_domains: list[str] = []
+    # X is blocked outright; only an appeal grant opens a specific post or profile.
+    hard_block_domains: list[str] = ["x.com", "twitter.com"]
     always_allow_domains: list[str] = []
 
 
@@ -87,7 +86,7 @@ class Config(BaseModel):
     classifier: ClassifierConfig = ClassifierConfig(provider="openrouter", model="typesafe/jev-1.13")
     appeals: AppealsConfig = AppealsConfig()
     rules: Rules = Rules()
-    cache_ttl_days: dict[str, float] = Field(default_factory=lambda: {"youtube": 30, "x": 1})
+    cache_ttl_days: dict[str, float] = Field(default_factory=lambda: {"youtube": 30})
     watchdog: WatchdogConfig = WatchdogConfig()
 
 

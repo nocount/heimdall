@@ -21,7 +21,7 @@ classifier:
   timeout_ms: 1500              # Jev p99 was 976ms in the Phase 0 bench
   # Phase 0 (2026-10-23): at 0.81, Jev kept 7/10 allow labels with 0/143
   # false allows. YouTube is judged on `educational` alone.
-  thresholds: { educational: 0.81, ai_related: 0.7 }
+  thresholds: { educational: 0.81 }
   # Used when the primary errors or times out. A different provider, so an
   # OpenRouter outage doesn't fail everything closed. Models aren't
   # calibrated alike, so it carries its own thresholds (Clef: 0.76 kept 5/10
@@ -33,7 +33,7 @@ classifier:
     provider: workers_ai
     model: "@cf/cloudflare/clef-flash"
     timeout_ms: 1200
-    thresholds: { educational: 0.76, ai_related: 0.7 }
+    thresholds: { educational: 0.76 }
 
 appeals:                        # Phase 2; not used yet
   model: claude-haiku-5-5
@@ -45,12 +45,12 @@ appeals:                        # Phase 2; not used yet
 rules:
   youtube:
     block_paths: ["/", "/shorts/*", "/feed/*"]
-  x:
-    block_paths: ["/home", "/explore", "/explore/*", "/notifications", "/notifications/*", "/i/lists/*"]
-  hard_block_domains: []        # e.g. [reddit.com]
+  # Blocked outright during focus hours; an appeal grants one post, profile
+  # or search (by ID) for a while. X isn't sent to the classifier.
+  hard_block_domains: [x.com, twitter.com]   # add other time sinks, e.g. reddit.com
   always_allow_domains: []
 
-cache_ttl_days: { youtube: 30, x: 1 }
+cache_ttl_days: { youtube: 30 }
 
 watchdog:                       # Phase 3; not used yet
   heartbeat_timeout_s: 60

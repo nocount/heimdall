@@ -46,10 +46,6 @@ def _summary(row) -> str:
         lines = [f"{meta.get('title', '?')}  —  {meta.get('channel', '?')}  [{meta.get('category', '?')}]"]
         if desc := (meta.get("description") or "").strip():
             lines.append(textwrap.shorten(desc, 220))
-    elif row["site"] == "x":
-        who = meta.get("author") or meta.get("handle") or row["item_id"] or ""
-        text = meta.get("text") or meta.get("bio") or " / ".join(meta.get("recent") or [])
-        lines = [f"{who}: {textwrap.shorten(text or '(no text)', 260)}"]
     else:
         lines = [row["url"]]
     return "\n      ".join(lines)
