@@ -3,7 +3,7 @@
 Writes bench/data/meta.jsonl, one line per video, with `metadata` in the same
 shape the extension sends. Already-fetched videos are skipped, so it resumes.
 
-    uv run --project daemon bench/fetch_meta.py [--limit 150] [--workers 4]
+    uv run --project daemon bench/fetch_meta.py [--limit N] [--workers 4]
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--history", type=Path, default=DATA / "history.csv")
     ap.add_argument("--out", type=Path, default=DATA / "meta.jsonl")
-    ap.add_argument("--limit", type=int, default=150, help="max videos to fetch this run")
+    ap.add_argument("--limit", type=int, default=1000, help="max videos to fetch this run")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--retry-failed", action="store_true")
     args = ap.parse_args()

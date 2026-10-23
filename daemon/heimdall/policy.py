@@ -20,7 +20,7 @@ from datetime import datetime
 
 from . import pages
 from .cache import AnswerCache
-from .config import Config
+from .config import Config, Thresholds
 from .db import DB, iso
 from .models.systemone import Classifier, SystemOneError
 from .pages import Page
@@ -56,9 +56,14 @@ def _pct(p: float) -> str:
     return f"{round(p * 100)}%"
 
 
-def apply_rules(site: str, answers: dict, config: Config) -> RuleOutcome:
-    """Combine atomic answers into a verdict. Pure; the bench uses this too."""
-    th = config.classifier.thresholds
+def apply_rules(site: str, answers: dict, th: Thresholds) -> RuleOutcome:
+    """Combine atomic answers into a verdict. Pure; the bench uses this too.
+
+    YouTube is judged on `educational` alone. Phase 0 showed content_type
+    gating blocked the AI interviews and podcasts that should be allowed (the
+    models rightly call them commentary), so content_type only names the
+    category in the reason.
+    """
     ctype = answers.get("content_type") or {}
     choice = ctype.get("choice")
     choice_p = (ctype.get("probabilities") or {}).get(choice, ctype.get("confidence", 0.0))
@@ -66,23 +71,16 @@ def apply_rules(site: str, answers: dict, config: Config) -> RuleOutcome:
 
     if site == "youtube":
         edu = answers["educational"]["noul"]
-        conf = ctype.get("confidence", 0.0)
-        allow_types = config.rules.youtube.allow_types
-        details = {"content_type": choice, "confidence": conf, "educational": edu}
-        if choice not in allow_types:
-            return RuleOutcome(BLOCK, f"classified as {category}", category, details)
-        if edu < th.educational:
-            return RuleOutcome(BLOCK, f"{category}, but only {_pct(edu)} educational", category, details)
-        if conf < th.content_conf:
-            return RuleOutcome(BLOCK, f"unsure what this is: {category}, confidence {_pct(conf)}",
-                               category, details)
-        return RuleOutcome(ALLOW, f"{category}, {_pct(edu)} educational", category, details)
+        details = {"educational": edu, "content_type": choice}
+        if edu >= th.educational:
+            return RuleOutcome(ALLOW, f"{_pct(edu)} educational ({category})", category, details)
+        return RuleOutcome(BLOCK, f"only {_pct(edu)} educational ({category})", category, details)
 
     if site == "x":
         ai = answers["ai_related"]["noul"]
         details = {"ai_related": ai, "content_type": choice}
         if ai >= th.ai_related:
-            return RuleOutcome(ALLOW, f"{_pct(ai)} AI-related", category, details)
+            return RuleOutcome(ALLOW, f"{_pct(ai)} AI-related ({category})", category, details)
         return RuleOutcome(BLOCK, f"only {_pct(ai)} AI-related ({category})", category, details)
 
     raise ValueError(f"no rules for site {site}")
@@ -133,7 +131,7 @@ class Policy:
 
         if (hit := self.cache.get(page, now)) is not None:
             model, answers = hit
-            out = apply_rules(page.site, answers, self.config)
+            out = apply_rules(page.site, answers, self.config.classifier.thresholds_for(model))
             return Decision(out.verdict, "cache", out.reason, out.category, answers, model, 0, ttl_s)
 
         try:
@@ -149,7 +147,7 @@ class Policy:
             return Decision(BLOCK, "error", "classifier unavailable")
 
         try:
-            out = apply_rules(page.site, result.answers, self.config)
+            out = apply_rules(page.site, result.answers, self.config.classifier.thresholds_for(result.model))
         except (KeyError, TypeError) as e:
             log.error("unexpected answer shape from %s: %s", result.model, result.answers)
             return Decision(BLOCK, "error", f"classifier returned an unexpected answer ({e})",

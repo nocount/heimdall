@@ -9,8 +9,10 @@ Requests are built and verdicts combined by the daemon's own code
 daemon. Answers are cached in bench/data/results.jsonl; rerunning only calls
 the models for new labels. --fresh ignores the cache.
 
-The false-allow rate (blocked-labeled items the model would allow) matters
-most: a leak defeats the tool. False blocks are friction, but appealable.
+Labels are lopsided (most of what you watch should be blocked), so accuracy
+is meaningless: blocking everything scores >90%. Each site is instead judged
+by how many allow labels it keeps at a false-allow budget. False allows leak
+(a leak defeats the tool); false blocks are friction, but appealable.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from pathlib import Path
 import httpx
 
 from heimdall import labels, pages
-from heimdall.config import Config, ProviderConfig, load_config
+from heimdall.config import Config, ProviderConfig, Thresholds, load_config
 from heimdall.models.systemone import SystemOneError, make_provider
 from heimdall.policy import apply_rules
 from heimdall.questions import build_request
@@ -38,7 +40,14 @@ DEFAULT_MODELS = [
     "openrouter:typesafe/jev-1.13",
     "openrouter:microsoft/microsoft-decision-1",
 ]
-GATE = {"accuracy": 0.90, "false_allow": 0.05, "p95_ms": 300}
+REPO = Path(__file__).resolve().parents[1]
+GATE = {
+    "false_allow": 0.05,  # share of block labels let through
+    "kept_allow": 0.75,   # share of allow labels let through, within the false-allow budget
+    "min_labels": 30,     # per class and site; below this, rates move in big jumps
+}
+# The one score each site's rule thresholds on (policy.apply_rules).
+SCORE_KEY = {"youtube": "educational", "x": "ai_related"}
 
 
 @dataclass
@@ -127,105 +136,103 @@ async def run_model(cfg: ProviderConfig, items: list[Item], cache: dict, results
     return out
 
 
-def score(items: list[Item], results: dict, config: Config) -> dict:
-    n = correct = blocks = allows = false_allow = false_block = 0
+def score(items: list[Item], results: dict, th: Thresholds) -> dict:
+    allows = blocks = kept = false_allow = 0
     wrong = []
     for item in items:
         rec = results.get(item.id)
         if not rec or "error" in rec:
             continue
-        verdict = apply_rules(item.site, rec["answers"], config)
-        n += 1
-        if item.label == "block":
+        verdict = apply_rules(item.site, rec["answers"], th)
+        if item.label == "allow":
+            allows += 1
+            kept += verdict.verdict == "allow"
+        else:
             blocks += 1
             false_allow += verdict.verdict == "allow"
-        else:
-            allows += 1
-            false_block += verdict.verdict == "block"
-        if verdict.verdict == item.label:
-            correct += 1
-        else:
+        if verdict.verdict != item.label:
             wrong.append((item, verdict))
     return {
-        "n": n,
-        "accuracy": correct / n if n else 0.0,
-        "false_allow": false_allow / blocks if blocks else 0.0,
-        "false_block": false_block / allows if allows else 0.0,
-        "blocks": blocks, "allows": allows, "wrong": wrong,
+        "allows": allows, "blocks": blocks, "kept": kept, "false_allows": false_allow,
+        "kept_rate": kept / allows if allows else 0.0,
+        "false_allow_rate": false_allow / blocks if blocks else 0.0,
+        "wrong": wrong,
     }
 
 
-def with_thresholds(config: Config, **th) -> Config:
-    c = config.model_copy(deep=True)
-    for k, v in th.items():
-        setattr(c.classifier.thresholds, k, v)
-    return c
+def frontier(site: str, items: list[Item], results: dict, base: Thresholds) -> list[tuple[float, dict]]:
+    """For each false-allow count up to the gate's budget, the lowest threshold
+    that stays within it (keeping the most allows), and its scores."""
+    key = SCORE_KEY[site]
+    lo = 0.30 if site == "x" else 0.50
+    scored = [(t, score(items, results, base.model_copy(update={key: t})))
+              for t in (round(lo + i / 100, 2) for i in range(int(round((1 - lo) * 100))))]
+    budget = int(GATE["false_allow"] * max(s["blocks"] for _, s in scored))
+    points = []
+    for k in range(budget + 1):
+        ok = [(t, s) for t, s in scored if s["false_allows"] <= k]
+        if ok:
+            t, s = min(ok, key=lambda ts: ts[0])
+            if not points or s["kept"] > points[-1][1]["kept"]:
+                points.append((t, s))
+    return points
 
 
-def frange(lo: float, hi: float, step: float) -> list[float]:
-    return [round(lo + i * step, 2) for i in range(int(round((hi - lo) / step)) + 1)]
+def fmt(s: dict) -> str:
+    return (f"kept {s['kept']}/{s['allows']} allows ({s['kept_rate'] * 100:.0f}%), "
+            f"false allows {s['false_allows']}/{s['blocks']} ({s['false_allow_rate'] * 100:.1f}%)")
 
 
-# Threshold grids per site. The sites' thresholds are independent, so each
-# site is swept and gated on its own.
-SWEEP_GRIDS = {
-    "youtube": [{"educational": e, "content_conf": c}
-                for e in frange(0.5, 0.95, 0.05) for c in frange(0.3, 0.9, 0.1)],
-    "x": [{"ai_related": a} for a in frange(0.3, 0.95, 0.05)],
-}
+def timeout_for(label: str, config: Config) -> int:
+    fb = config.classifier.fallback
+    return fb.timeout_ms if fb is not None and fb.label == label else config.classifier.timeout_ms
 
 
-def sweep(site: str, items: list[Item], results: dict, config: Config) -> list[tuple[dict, dict]]:
-    """Score every threshold combination for one site; best first (false-allow within gate, then accuracy)."""
-    grid = [(th, score(items, results, with_thresholds(config, **th))) for th in SWEEP_GRIDS[site]]
-    grid.sort(key=lambda g: (g[1]["false_allow"] > GATE["false_allow"], -g[1]["accuracy"], g[1]["false_allow"]))
-    return grid
-
-
-def pct(x: float) -> str:
-    return f"{x * 100:5.1f}%"
-
-
-def fmt_scores(s: dict) -> str:
-    return f"acc {pct(s['accuracy'])}  false-allow {pct(s['false_allow'])}  false-block {pct(s['false_block'])}"
-
-
-def report(label: str, items: list[Item], results: dict, config: Config, show_errors: bool) -> None:
+def report(cfg: ProviderConfig, items: list[Item], results: dict, config: Config, show_errors: bool) -> None:
     errors = [r["error"] for r in results.values() if "error" in r]
     lat = sorted(r["latency_ms"] for r in results.values() if "latency_ms" in r)
-    p50 = statistics.median(lat) if lat else None
-    p95 = lat[min(len(lat) - 1, int(0.95 * len(lat)))] if lat else None
 
-    print(f"\n=== {label} ===")
+    print(f"\n=== {cfg.label} ===")
     if errors:
         print(f"  {len(errors)} errors, e.g. {errors[0][:160]}")
     if not lat:
         return
-    fast = p95 < GATE["p95_ms"]
-    print(f"  latency p50 {p50:.0f}ms  p95 {p95}ms (includes network)  {'ok' if fast else 'TOO SLOW'}")
+    pc = lambda q: lat[min(len(lat) - 1, int(q * len(lat)))]
+    timeout = timeout_for(cfg.label, config)
+    fast = pc(0.99) <= timeout
+    print(f"  latency p50 {pc(0.5)}ms  p95 {pc(0.95)}ms  p99 {pc(0.99)}ms  max {lat[-1]}ms (includes network); "
+          f"daemon timeout {timeout}ms: {'ok' if fast else 'p99 OVER TIMEOUT, would fail closed'}")
 
+    th = config.classifier.thresholds_for(cfg.label)
     for site in sorted({i.site for i in items}):
         site_items = [i for i in items if i.site == site]
-        s = score(site_items, results, config)
-        print(f"  {site}: n={s['n']} ({s['allows']} allow / {s['blocks']} block labels)")
-        print(f"    at config thresholds:  {fmt_scores(s)}")
-        best = sweep(site, site_items, results, config)
-        for th, bs in best[:3]:
-            knobs = "  ".join(f"{k} {v:.2f}" for k, v in th.items())
-            print(f"    sweep {knobs:34} {fmt_scores(bs)}")
-        th, bs = best[0]
-        ok = bs["accuracy"] >= GATE["accuracy"] and bs["false_allow"] <= GATE["false_allow"] and fast
-        print(f"    gate (acc >= 90%, false-allow <= 5%, p95 < 300ms) at best thresholds: {'PASS' if ok else 'FAIL'}")
+        key = SCORE_KEY[site]
+        s = score(site_items, results, th)
+        print(f"  {site}: {s['allows']} allow / {s['blocks']} block labels")
+        print(f"    config  {key} >= {getattr(th, key):.2f}: {fmt(s)}")
+        points = frontier(site, site_items, results, th)
+        for t, fs in points:
+            print(f"    sweep   {key} >= {t:.2f}: {fmt(fs)}")
+
+        enough = min(s["allows"], s["blocks"]) >= GATE["min_labels"]
+        best_t, best = points[-1] if points else (None, None)
+        if not enough:
+            verdict = f"NOT ENOUGH LABELS (need >= {GATE['min_labels']} of each)"
+        elif best is not None and best["kept_rate"] >= GATE["kept_allow"] and fast:
+            verdict = f"PASS at {key} >= {best_t:.2f}"
+        else:
+            verdict = "FAIL"
+        print(f"    gate (keeps >= {GATE['kept_allow']:.0%} of allows with <= {GATE['false_allow']:.0%} "
+              f"false allows, p99 within timeout): {verdict}")
 
         if show_errors:
-            for item, verdict in s["wrong"]:
+            for item, v in sorted(s["wrong"], key=lambda w: w[0].label):
                 title = item.state.get("video", {}).get("title") or json.dumps(item.state, ensure_ascii=False)[:100]
-                print(f"      labeled {item.label:5} got {verdict.verdict:5} {item.id}: {title}\n"
-                      f"          {verdict.reason}")
+                print(f"      labeled {item.label:5} got {v.verdict:5} {item.id}: {title}\n          {v.reason}")
 
 
 async def main_async(args) -> None:
-    config = load_config(args.config) if args.config else Config()
+    config = load_config(args.config)
     rows = labels.load(args.labels)
     if args.site:
         rows = {k: r for k, r in rows.items() if r["site"] == args.site}
@@ -240,7 +247,7 @@ async def main_async(args) -> None:
     for spec in args.models:
         cfg = parse_model(spec)
         results = await run_model(cfg, items, cache, args.results, args.concurrency, args.fresh)
-        report(spec, items, results, config, args.show_errors)
+        report(cfg, items, results, config, args.show_errors)
 
 
 def main() -> None:
@@ -248,7 +255,8 @@ def main() -> None:
     ap.add_argument("--models", nargs="+", default=DEFAULT_MODELS, metavar="PROVIDER:MODEL[@URL]")
     ap.add_argument("--labels", type=Path, default=DATA / "labels.csv")
     ap.add_argument("--results", type=Path, default=DATA / "results.jsonl")
-    ap.add_argument("--config", help="config whose thresholds/allow_types to score with (default: built-in)")
+    ap.add_argument("--config", default=str(REPO / "config.example.yaml"),
+                    help="config whose thresholds and timeouts to score against (default: config.example.yaml)")
     ap.add_argument("--env-file", type=Path, help="KEY=VALUE secrets file, e.g. secrets.env")
     ap.add_argument("--site", choices=["youtube", "x"])
     ap.add_argument("--concurrency", type=int, default=4)

@@ -1,7 +1,7 @@
 """Model-answer cache keyed by video ID / tweet ID.
 
-It stores the model's raw answers, not the verdict, so retuning thresholds or
-allow_types takes effect immediately on cached pages.
+It stores the model's raw answers, not the verdict, so retuned thresholds take
+effect immediately on cached pages.
 """
 
 from __future__ import annotations

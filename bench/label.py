@@ -4,8 +4,11 @@
     uv run --project daemon bench/label.py --x-csv bench/data/x_samples.csv
 
 Keys: a = allow, b = block, s = skip, d = full description, q = quit.
-Label as you'd want heimdall to decide during focus hours. Aim for ~80 YouTube
-labels with a deliberate mix; the running tally helps.
+Label as you'd want heimdall to decide during focus hours.
+
+Most of a watch history should be blocked, and the bench needs >= 30 labels
+of each kind to say anything. So by default, likely allows come first (by
+category, length and title/tag keywords); --order recent follows the history.
 """
 
 from __future__ import annotations
@@ -20,11 +23,36 @@ from pathlib import Path
 from heimdall import labels, pages
 
 DATA = Path(__file__).parent / "data"
+MIN_PER_CLASS = 30  # matches run_bench's GATE["min_labels"]
+
+CATEGORY_WEIGHT = {
+    "Education": 3, "Science & Technology": 3, "Howto & Style": 2, "News & Politics": 1,
+    "Gaming": -3, "Comedy": -3, "Music": -3, "Entertainment": -2, "Film & Animation": -2, "Sports": -2,
+}
+ALLOW_WORDS = {
+    "tutorial", "lecture", "course", "explained", "guide", "learn", "how", "paper", "research",
+    "interview", "podcast", "talk", "ai", "a.i.", "llm", "llms", "agents", "inference", "model",
+    "models", "math", "physics", "programming", "python", "rust", "engineering", "science",
+}
 
 
 def tally(rows: dict) -> str:
     c = Counter((r["site"], r["label"]) for r in rows.values())
-    return "  ".join(f"{site} {label}: {n}" for (site, label), n in sorted(c.items())) or "none yet"
+    out = "  ".join(f"{site} {label}: {n}" for (site, label), n in sorted(c.items())) or "none yet"
+    short = [f"{site} {label}" for site in {r["site"] for r in rows.values()} for label in labels.LABELS
+             if c[(site, label)] < MIN_PER_CLASS]
+    return out + (f"   (need {MIN_PER_CLASS}+: {', '.join(sorted(short))})" if short else "")
+
+
+def likely_allow(row: dict) -> float:
+    """Rough prior that a video is one you'd allow. Only orders the queue."""
+    m = row["metadata"]
+    score = CATEGORY_WEIGHT.get(m.get("category"), 0)
+    words = set(f"{m.get('title', '')} {' '.join(m.get('tags') or [])}".lower().replace("|", " ").split())
+    score += min(3, len(words & ALLOW_WORDS))
+    if (row.get("duration") or 0) >= 20 * 60:  # lectures, talks and podcasts run long
+        score += 1
+    return score
 
 
 def load_meta(path: Path) -> list[dict]:
@@ -52,6 +80,8 @@ def show(row: dict, full: bool = False) -> None:
 def label_videos(args) -> None:
     existing = labels.load(args.labels)
     todo = [r for r in load_meta(args.meta) if labels.label_id("youtube", r["video_id"], r["url"]) not in existing]
+    if args.order == "likely":
+        todo.sort(key=likely_allow, reverse=True)  # stable: ties stay in history order
     print(f"{len(todo)} unlabeled videos. Tally: {tally(existing)}")
     for row in todo:
         show(row)
@@ -97,6 +127,8 @@ def main() -> None:
     ap.add_argument("--meta", type=Path, default=DATA / "meta.jsonl")
     ap.add_argument("--labels", type=Path, default=DATA / "labels.csv")
     ap.add_argument("--x-csv", type=Path, help="import hand-collected X samples instead")
+    ap.add_argument("--order", choices=["likely", "recent"], default="likely",
+                    help="likely allows first (default), or history order")
     args = ap.parse_args()
     if args.x_csv:
         import_x(args)

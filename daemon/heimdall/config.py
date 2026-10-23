@@ -22,8 +22,7 @@ class FocusWindow(BaseModel):
 
 
 class Thresholds(BaseModel):
-    educational: float = 0.75
-    content_conf: float = 0.6
+    educational: float = 0.81
     ai_related: float = 0.7
 
 
@@ -32,11 +31,24 @@ class ProviderConfig(BaseModel):
     model: str
     url: str | None = None  # base URL override; required for local_llamacpp
     timeout_ms: int = 1500
+    # Models aren't calibrated alike, so a fallback needs its own thresholds.
+    thresholds: Thresholds | None = None
+
+    @property
+    def label(self) -> str:
+        return f"{self.provider}:{self.model}"
 
 
 class ClassifierConfig(ProviderConfig):
     thresholds: Thresholds = Thresholds()
     fallback: ProviderConfig | None = None
+
+    def thresholds_for(self, model_label: str | None) -> Thresholds:
+        """Thresholds for whichever provider produced the answers."""
+        fb = self.fallback
+        if fb is not None and fb.thresholds is not None and model_label == fb.label:
+            return fb.thresholds
+        return self.thresholds
 
 
 class AppealsConfig(BaseModel):
@@ -49,14 +61,10 @@ class AppealsConfig(BaseModel):
 
 class SiteRules(BaseModel):
     block_paths: list[str] = []
-    allow_types: list[str] = []
 
 
 class Rules(BaseModel):
-    youtube: SiteRules = SiteRules(
-        allow_types=["tutorial_or_lecture", "technical_talk"],
-        block_paths=["/", "/shorts/*", "/feed/*"],
-    )
+    youtube: SiteRules = SiteRules(block_paths=["/", "/shorts/*", "/feed/*"])
     x: SiteRules = SiteRules(block_paths=["/home", "/explore", "/notifications", "/i/lists/*"])
     hard_block_domains: list[str] = []
     always_allow_domains: list[str] = []
@@ -76,9 +84,7 @@ class Config(BaseModel):
     shadow: bool = True
     force_focus: bool | None = None
     db_path: str = "/var/lib/heimdall/heimdall.db"
-    classifier: ClassifierConfig = ClassifierConfig(
-        provider="workers_ai", model="@cf/cloudflare/clef-flash"
-    )
+    classifier: ClassifierConfig = ClassifierConfig(provider="openrouter", model="typesafe/jev-1.13")
     appeals: AppealsConfig = AppealsConfig()
     rules: Rules = Rules()
     cache_ttl_days: dict[str, float] = Field(default_factory=lambda: {"youtube": 30, "x": 1})

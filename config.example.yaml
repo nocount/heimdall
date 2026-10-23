@@ -16,15 +16,24 @@ force_focus: null
 db_path: /var/lib/heimdall/heimdall.db
 
 classifier:
-  provider: workers_ai          # workers_ai | openrouter | local_llamacpp
-  model: "@cf/cloudflare/clef-flash"
-  timeout_ms: 1500
-  thresholds: { educational: 0.75, content_conf: 0.6, ai_related: 0.7 }
-  fallback:                     # optional; requires local GGUF + llama-server
-    provider: local_llamacpp
-    model: clef-flash
-    url: http://127.0.0.1:8081
-    timeout_ms: 1500
+  provider: openrouter          # workers_ai | openrouter | local_llamacpp
+  model: "typesafe/jev-1.13"
+  timeout_ms: 1500              # Jev p99 was 976ms in the Phase 0 bench
+  # Phase 0 (2026-10-23): at 0.81, Jev kept 7/10 allow labels with 0/143
+  # false allows. YouTube is judged on `educational` alone.
+  thresholds: { educational: 0.81, ai_related: 0.7 }
+  # Used when the primary errors or times out. A different provider, so an
+  # OpenRouter outage doesn't fail everything closed. Models aren't
+  # calibrated alike, so it carries its own thresholds (Clef: 0.76 kept 5/10
+  # with 0 false allows). Primary + fallback timeouts stay under the
+  # extension's 3s request timeout. For a local fallback instead:
+  #   provider: local_llamacpp, model: clef-flash, url: http://127.0.0.1:8081
+  # (re-bench it first; a quantized GGUF may not match Workers AI's scores).
+  fallback:
+    provider: workers_ai
+    model: "@cf/cloudflare/clef-flash"
+    timeout_ms: 1200
+    thresholds: { educational: 0.76, ai_related: 0.7 }
 
 appeals:                        # Phase 2; not used yet
   model: claude-haiku-5-5
@@ -35,7 +44,6 @@ appeals:                        # Phase 2; not used yet
 
 rules:
   youtube:
-    allow_types: [tutorial_or_lecture, technical_talk]
     block_paths: ["/", "/shorts/*", "/feed/*"]
   x:
     block_paths: ["/home", "/explore", "/explore/*", "/notifications", "/notifications/*", "/i/lists/*"]

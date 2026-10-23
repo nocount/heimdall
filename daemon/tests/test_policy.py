@@ -3,7 +3,7 @@ from datetime import timedelta
 import pytest
 
 from heimdall import pages
-from heimdall.config import Config
+from heimdall.config import Config, ProviderConfig, Thresholds
 from heimdall.db import DB, iso
 from heimdall.policy import Policy, apply_rules
 
@@ -18,29 +18,43 @@ def make(config, **kw):
     return Policy(config, DB(config.db_path), clf), clf
 
 
+TH = Thresholds(educational=0.81, ai_related=0.7)
+
+
 @pytest.mark.parametrize("answers,verdict", [
-    (yt_answers(), "allow"),
-    (yt_answers(content_type="technical_talk"), "allow"),
-    (yt_answers(content_type="commentary_or_opinion"), "block"),
-    (yt_answers(edu=0.5), "block"),
-    (yt_answers(conf=0.4), "block"),
+    (yt_answers(edu=0.9), "allow"),
+    (yt_answers(edu=0.81), "allow"),
+    (yt_answers(edu=0.8), "block"),
+    # The type no longer gates: an educational interview is allowed...
+    (yt_answers(content_type="commentary_or_opinion", edu=0.85), "allow"),
+    # ...and neither does Clef's confidence, which isn't P(choice).
+    (yt_answers(conf=0.4, edu=0.95), "allow"),
 ])
 def test_youtube_rules(answers, verdict):
-    assert apply_rules("youtube", answers, Config()).verdict == verdict
+    assert apply_rules("youtube", answers, TH).verdict == verdict
 
 
 def test_rule_reason_names_category():
-    out = apply_rules("youtube", yt_answers(content_type="entertainment", conf=0.87), Config())
-    assert out.reason == "classified as entertainment (87%)"
+    out = apply_rules("youtube", yt_answers(content_type="entertainment", conf=0.87, edu=0.12), TH)
+    assert out.reason == "only 12% educational (entertainment (87%))"
 
 
 @pytest.mark.parametrize("ai,verdict", [(0.9, "allow"), (0.7, "allow"), (0.69, "block")])
 def test_x_rules(ai, verdict):
-    assert apply_rules("x", x_answers(ai=ai), Config()).verdict == verdict
+    assert apply_rules("x", x_answers(ai=ai), TH).verdict == verdict
+
+
+def test_fallback_answers_use_fallback_thresholds():
+    c = Config().classifier
+    c.fallback = ProviderConfig(provider="workers_ai", model="@cf/cloudflare/clef-flash",
+                                thresholds=Thresholds(educational=0.76))
+    assert c.thresholds_for("workers_ai:@cf/cloudflare/clef-flash").educational == 0.76
+    assert c.thresholds_for("openrouter:typesafe/jev-1.13").educational == 0.81
+    assert c.thresholds_for(None).educational == 0.81
 
 
 async def test_outside_focus_allows_without_model(config):
-    policy, clf = make(config, answers=yt_answers(content_type="gaming"))
+    policy, clf = make(config, answers=yt_answers(content_type="gaming", edu=0.2))
     d = await policy.decide(pages.parse(WATCH), YT_META, EVENING)
     assert (d.verdict, d.source) == ("allow", "schedule")
     assert clf.calls == []
@@ -78,7 +92,7 @@ async def test_model_then_cache(config):
 
 
 async def test_cache_reapplies_thresholds(config):
-    policy, clf = make(config, answers=yt_answers(edu=0.8))
+    policy, clf = make(config, answers=yt_answers(edu=0.84))
     await policy.evaluate(WATCH, YT_META, FOCUS)
     config.classifier.thresholds.educational = 0.85
     _, d, _ = await policy.evaluate(WATCH, YT_META, FOCUS)
@@ -108,13 +122,13 @@ async def test_missing_metadata_fails_closed(config):
 
 async def test_enforcing_mode_serves_verdict(config):
     config.shadow = False
-    policy, _ = make(config, answers=yt_answers(content_type="gaming"))
+    policy, _ = make(config, answers=yt_answers(content_type="gaming", edu=0.2))
     _, d, served = await policy.evaluate(WATCH, YT_META, FOCUS)
     assert d.verdict == served == "block"
 
 
 async def test_grant_allows(config):
-    policy, clf = make(config, answers=yt_answers(content_type="gaming"))
+    policy, clf = make(config, answers=yt_answers(content_type="gaming", edu=0.2))
     policy.db.execute("INSERT INTO grants (site, key, expires_at) VALUES (?, ?, ?)",
                       ("youtube", "abc123", iso(FOCUS + timedelta(minutes=20))))
     _, d, _ = await policy.evaluate(WATCH, YT_META, FOCUS)
@@ -134,8 +148,8 @@ async def test_hard_block_and_always_allow_domains(config):
 
 
 async def test_decisions_logged(config):
-    policy, _ = make(config, answers=yt_answers(content_type="gaming"))
+    policy, _ = make(config, answers=yt_answers(content_type="gaming", edu=0.2))
     decision_id, _, _ = await policy.evaluate(WATCH, YT_META, FOCUS)
     row = policy.db.decision(decision_id)
     assert (row["verdict"], row["served"], row["shadow"], row["model"]) == ("block", "allow", 1, "fake:model")
-    assert row["reason"].startswith("classified as gaming")
+    assert row["reason"] == "only 20% educational (gaming (90%))"

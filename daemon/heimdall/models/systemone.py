@@ -42,7 +42,7 @@ class Provider:
 
     @property
     def label(self) -> str:
-        return f"{self.cfg.provider}:{self.cfg.model}"
+        return self.cfg.label
 
     def _secret(self, name: str) -> str:
         value = self.env.get(name)

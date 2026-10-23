@@ -36,7 +36,7 @@ Status: **plan, not yet built**. Target machine: the Ubuntu desktop (Ryzen 7800X
 |---|---|---|
 | Interception point | Firefox extension | You only use Firefox. An extension sees the page content (needed for content-aware judgments) and runs in private windows when forced by policy. A system proxy can't see HTTPS content without MITM. |
 | Bypass resistance | Firefox enterprise policy + root watchdog | `policies.json` force-installs the extension, so it can't be removed. A root watchdog covers safe mode and other browsers. |
-| Classifier | **Clef-flash** (Cloudflare, 9B decision model) on Workers AI | ~40ms median (vendor-reported), so the "checking" curtain is near-invisible. Accepts images (thumbnails later). Open weights under Apache 2.0, with a local fallback via llama.cpp. Well within the Workers AI free tier. Final choice gated on the Phase 0 bake-off against Jev and Microsoft-Decision-1. |
+| Classifier | **Jev** (`typesafe/jev-1.13` via OpenRouter), with Clef-flash on Workers AI as fallback. *Originally Clef-flash; changed after the Phase 0 bake-off: Jev kept 7/10 allow labels vs Clef's 5/10 at zero false allows, and its p99 (976ms) fits the timeout where Clef's (2.1s) doesn't.* Original reasoning for Clef: | ~40ms median (vendor-reported), so the "checking" curtain is near-invisible. Accepts images (thumbnails later). Open weights under Apache 2.0, with a local fallback via llama.cpp. Well within the Workers AI free tier. Final choice gated on the Phase 0 bake-off against Jev and Microsoft-Decision-1. |
 | Appeal judge | **Claude Haiku 5.5** (`claude-haiku-5-5`) | Already set up. Appeals are rare and need real reasoning. ~$0.0003 per appeal. |
 | Decision logic | Atomic questions to the model; rules in code | Decision models work best on small typed questions. Code combines them, so rules stay tunable and auditable without re-prompting. |
 | Failure policy | **Fail closed** during focus hours | Otherwise "stop the daemon" or "lose network" becomes the easy out. |
@@ -196,14 +196,12 @@ Evaluated in order. The first match wins.
    - Always-allow domains → **allow**
 4. **Cache hit** (video ID or tweet ID within its TTL) → reuse the verdict.
 5. **Model call** with the atomic questions (section 7). Then the code applies the rules:
-   - YouTube allow requires all of:
-     - `content_type ∈ {tutorial_or_lecture, technical_talk}`
-     - `P(educational) ≥ θ_edu`
-     - `confidence(content_type) ≥ θ_conf`
+   - YouTube allow requires `P(educational) ≥ θ_edu`. `content_type` only names the category in the block reason.
+     - *Changed after Phase 0.* The original rule also required `content_type ∈ {tutorial_or_lecture, technical_talk}` and `confidence ≥ θ_conf`. That blocked 8 of 10 allow labels, which were AI interviews and podcasts that the models correctly call commentary or news. Clef's `confidence` also isn't P(choice): a tutorial at P = 0.95 had confidence 0.54.
    - X allow requires `P(ai_related) ≥ θ_ai`.
 6. **Model error or timeout → block.** The block is appealable, and the reason is marked "classifier unavailable".
 
-The thresholds (`θ`) are set from Phase 0 data, not guessed. They start at `θ_edu = 0.75`, `θ_conf = 0.6`, `θ_ai = 0.7`.
+The thresholds (`θ`) are set from Phase 0 data, not guessed. Each classifier provider has its own, because the models aren't calibrated alike. Jev: `θ_edu = 0.81`; Clef (fallback): `θ_edu = 0.76`. `θ_ai = 0.7` is untested until there are X labels.
 
 ---
 

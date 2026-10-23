@@ -21,24 +21,32 @@ The daemon and bench read these from the environment (in production via
 ```
 CF_ACCOUNT_ID=...
 CF_API_TOKEN=...          # Workers AI scope
-OPENROUTER_API_KEY=...    # bench only (Jev, Microsoft-Decision-1)
+OPENROUTER_API_KEY=...    # primary classifier (Jev); Workers AI Clef is the fallback
 ```
 
 ## Phase 0: classifier bake-off
 
 ```bash
 uv run --project daemon bench/export_history.py          # YouTube /watch visits, last 60 days
-uv run --project daemon bench/fetch_meta.py --limit 150  # metadata via yt-dlp (resumable)
-uv run --project daemon bench/label.py                   # a/b/s per video; aim for ~80, mixed
+uv run --project daemon bench/fetch_meta.py              # metadata via yt-dlp (resumable)
+uv run --project daemon bench/label.py                   # a/b/s per video; likely allows come first
 uv run --project daemon bench/label.py --x-csv bench/data/x_samples.csv   # format: x_samples.example.csv
 uv run --project daemon bench/run_bench.py --env-file secrets.env --show-errors
 ```
 
-`run_bench.py` builds requests and combines answers with the daemon's own code,
-reports accuracy / false-allow / false-block per site, sweeps thresholds, and
-checks the gate (≥90% accuracy, ≤5% false-allow, p95 < 300ms). Model answers
-are cached in `bench/data/results.jsonl`, so re-running after labeling more
-only calls the models for new items. Write the winning thresholds into config.
+`run_bench.py` builds requests and combines answers with the daemon's own code.
+Accuracy is useless on a history that's mostly blockable, so per site it
+reports how many allow labels each threshold keeps at each false-allow count,
+and gates on keeping ≥75% of allows with ≤5% false allows, ≥30 labels of each
+kind, and p99 latency within the daemon's timeout. Model answers are cached in
+`bench/data/results.jsonl`, so re-running after labeling more only calls the
+models for new items. Write the chosen thresholds into config.
+
+**Phase 0 outcome (2026-10-23, 10 allow / 143 block labels):** YouTube is
+judged on `educational` alone; gating on content type blocked the AI
+interviews and podcasts you allow. Jev is primary at `educational ≥ 0.81`
+(kept 7/10 allows, 0 false allows, p99 976ms), with Clef on Workers AI as
+the fallback at 0.76. Re-run once there are ≥30 allow labels.
 
 ## Phase 1: shadow mode
 
