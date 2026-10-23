@@ -2,11 +2,12 @@
 
 Watcher app for managing social platform use during focus hours: a Firefox
 extension plus a local daemon that judge YouTube videos by their content (a
-decision model), not by domain. X is blocked outright during focus hours; an
-appeal (Phase 2) opens a single post or profile. See [PLAN.md](PLAN.md) for the design.
+decision model), not by domain. X is blocked outright during focus hours. A
+blocked page can be appealed in one sentence, judged by Claude Haiku 5.5; a
+grant opens that one page for 10–40 minutes. See [PLAN.md](PLAN.md) for the design.
 
-**Status:** Phase 0 (bench) and Phase 1 (shadow mode) are built. Nothing is
-blocked yet; the daemon logs what it *would* have done.
+**Status:** Phases 0–2 are built: bench, shadow mode, and enforcement with
+appeals. Phase 3 (lockdown: signed XPI, Firefox policy, root watchdog) is next.
 
 ```
 daemon/      FastAPI daemon on 127.0.0.1:7878 + `heimdall` CLI (uv project)
@@ -20,9 +21,10 @@ The daemon and bench read these from the environment (in production via
 `EnvironmentFile=/etc/heimdall/secrets.env`):
 
 ```
-CF_ACCOUNT_ID=...
-CF_API_TOKEN=...          # Workers AI scope
-OPENROUTER_API_KEY=...    # primary classifier (Jev); Workers AI Clef is the fallback
+OPENROUTER_API_KEY=...    # the classifier (Jev)
+ANTHROPIC_API_KEY=...     # the appeal judge (Claude Haiku 5.5)
+CF_ACCOUNT_ID=...         # only to bench or fall back to Clef on Workers AI
+CF_API_TOKEN=...
 ```
 
 ## Phase 0: classifier bake-off
@@ -50,7 +52,7 @@ down, YouTube fails closed. X isn't classified at all; it's blocked outright.
 Re-run once there are ≥30 allow labels (retry failed fetches, or label real
 browsing with `heimdall review`).
 
-## Phase 1: shadow mode
+## Running it
 
 ```bash
 cp config.example.yaml config.local.yaml   # set db_path somewhere writable
@@ -64,8 +66,19 @@ In another terminal, run Firefox with the extension in a dev profile:
 cd extension && npm install && npm start
 ```
 
-The toolbar badge shows the would-be verdict (✕ = would block, ! = daemon
-unreachable); hover it for the reason. After a few days of normal use:
+With `shadow: false` (the default), a blocked page sends the tab to
+heimdall's block page: the reason, and unless it's a feed or Shorts, a box
+to appeal in one sentence. Limits are enforced by the daemon, not the model:
+≥8 words, 5 appeals a day, a 10-minute cooldown on a page after a denial,
+grants of at most 40 minutes. When a grant runs out or focus hours begin,
+open tabs are re-checked. Pages sit under a "checking…" curtain (video
+paused) until they're allowed. If the daemon is unreachable during focus
+hours, pages are blocked (fail closed).
+
+With `shadow: true`, nothing is blocked; the toolbar badge shows the
+would-be verdict (✕ = would block, ⏱ = granted, ! = daemon unreachable).
+
+To check how the classifier is doing:
 
 ```bash
 uv run --project daemon heimdall --config config.local.yaml review blocks   # c/w per decision

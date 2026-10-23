@@ -1,0 +1,141 @@
+:root {
+  --bg: #f6f5f2;
+  --fg: #1d1c1a;
+  --muted: #6b6862;
+  --line: #dcd9d2;
+  --field: #ffffff;
+  --accent: #2c5fd4;
+  --good-bg: #e6f2e8;
+  --good-fg: #1d5a2c;
+  --bad-bg: #f6e7e4;
+  --bad-fg: #7a2a1d;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615;
+    --fg: #e9e6df;
+    --muted: #9b978e;
+    --line: #34332f;
+    --field: #1f1e1c;
+    --accent: #7ea2f2;
+    --good-bg: #1b2e20;
+    --good-fg: #a6dcb2;
+    --bad-bg: #33201c;
+    --bad-fg: #f0b2a6;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  display: flex;
+  justify-content: center;
+}
+
+main {
+  width: 100%;
+  max-width: 560px;
+  padding: 12vh 20px 40px;
+}
+
+.brand {
+  margin: 0 0 28px;
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.target {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font: 13px/1.4 ui-monospace, "SF Mono", Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+
+.reason {
+  margin: 0 0 28px;
+  padding-left: 12px;
+  border-left: 3px solid var(--line);
+}
+
+section p { margin: 0 0 16px; }
+
+label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--fg);
+  font: inherit;
+  resize: vertical;
+}
+
+textarea:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.row button { margin-left: auto; }
+
+.muted { color: var(--muted); font-size: 14px; }
+
+button {
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+button:disabled { opacity: 0.45; cursor: default; }
+
+button.link {
+  padding: 0;
+  background: none;
+  color: var(--muted);
+  text-decoration: underline;
+  font-weight: 400;
+}
+
+.result {
+  margin: 20px 0 0;
+  padding: 12px 14px;
+  border-radius: 6px;
+}
+
+.result.good { background: var(--good-bg); color: var(--good-fg); }
+.result.bad { background: var(--bad-bg); color: var(--bad-fg); }
+
+.footer { margin-top: 40px; }

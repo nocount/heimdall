@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blocked · heimdall</title>
+  <link rel="stylesheet" href="blocked.css">
+</head>
+<body>
+  <main>
+    <p class="brand">heimdall</p>
+    <h1 id="title">Blocked during focus hours</h1>
+    <p class="target" id="target"></p>
+    <p class="reason" id="reason" hidden></p>
+
+    <section id="unreachable" hidden>
+      <p>heimdall's daemon isn't answering, so pages stay blocked during focus
+        hours until it does. Nothing to appeal to right now.</p>
+      <button id="retry" type="button">Try again</button>
+    </section>
+
+    <section id="no-appeal" hidden>
+      <p>Feeds and Shorts can't be appealed. Open the specific video or post you need instead.</p>
+    </section>
+
+    <form id="appeal" hidden>
+      <label for="why">Need it anyway? Make your case in one sentence.</label>
+      <textarea id="why" rows="3" maxlength="600"
+        placeholder="Be specific: what is it, and why do you need it right now?"></textarea>
+      <div class="row">
+        <span id="count" class="muted"></span>
+        <span id="left" class="muted"></span>
+        <button id="submit" type="submit" disabled>Appeal</button>
+      </div>
+    </form>
+
+    <p id="result" class="result" hidden></p>
+
+    <p class="footer"><button id="back" type="button" class="link">Go back</button></p>
+  </main>
+  <script src="blocked.js"></script>
+</body>
+</html>

@@ -1,13 +1,36 @@
 // heimdall background: the only part of the extension that talks to the daemon.
 //
-// Phase 1 (shadow): report pages, show the would-be verdict as a badge, send
-// heartbeats, and cache the daemon's status so Phase 2 can fail closed when
-// the daemon is down. Nothing is blocked yet.
+// Content scripts report each page (with metadata where they can read it).
+// The daemon decides; a "block" sends the tab to ui/blocked.html, which
+// offers the appeal box. The curtain the content scripts draw is cosmetic:
+// this redirect is the enforcement, and it happens here.
+//
+// Fail closed: during focus hours (per the last status the daemon sent, or
+// always if there is none), an unreachable daemon blocks the page too.
 
 const DAEMON = "http://127.0.0.1:7878";
 const REQUEST_TIMEOUT_MS = 3000;
 const STATUS_REFRESH_MS = 5 * 60 * 1000;
+// A content script that hasn't reported a navigation by now is broken or
+// gone; classify the URL without metadata, which the daemon fails closed on.
+const REPORT_GRACE_MS = 8000;
 const VERSION = browser.runtime.getManifest().version;
+const BLOCKED_PAGE = browser.runtime.getURL("ui/blocked.html");
+const FILTERED = [
+  { hostSuffix: "youtube.com" },
+  { hostEquals: "x.com" },
+  { hostSuffix: ".x.com" },
+  { hostEquals: "twitter.com" },
+  { hostSuffix: ".twitter.com" },
+];
+
+class DaemonError extends Error {
+  constructor(status, body) {
+    super(body?.detail || `daemon HTTP ${status}`);
+    this.status = status;
+    this.body = body;
+  }
+}
 
 async function call(path, body) {
   const ctrl = new AbortController();
@@ -19,11 +42,78 @@ async function call(path, body) {
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: ctrl.signal,
     });
-    if (!resp.ok) throw new Error(`daemon HTTP ${resp.status}`);
-    return await resp.json();
+    const json = await resp.json().catch(() => null);
+    if (!resp.ok) throw new DaemonError(resp.status, json);
+    return json;
   } finally {
     clearTimeout(timer);
   }
+}
+
+// --- status and focus hours -------------------------------------------------
+
+async function cachedStatus() {
+  const { status } = await browser.storage.local.get("status");
+  return status || null;
+}
+
+async function refreshStatus(force = false) {
+  const { statusFetchedAt = 0 } = await browser.storage.local.get("statusFetchedAt");
+  if (!force && Date.now() - statusFetchedAt < STATUS_REFRESH_MS) return cachedStatus();
+  try {
+    const status = await call("/v1/status");
+    await browser.storage.local.set({ status, statusFetchedAt: Date.now() });
+    if (status.next_change) {
+      // Re-check open tabs the moment focus hours start (or end).
+      browser.alarms.create("focus-change", { when: Date.parse(status.next_change) + 2000 });
+    }
+    return status;
+  } catch (e) {
+    console.warn("heimdall: status refresh failed", e);
+    return cachedStatus();
+  }
+}
+
+const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+
+// Mirrors daemon/heimdall/schedule.py, for when the daemon can't be asked.
+function isFocus(schedule, now = new Date()) {
+  if (schedule.force_focus === true || schedule.force_focus === false) return schedule.force_focus;
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: schedule.timezone, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).formatToParts(now).map((p) => [p.type, p.value]),
+  );
+  const day = parts.weekday.slice(0, 3).toLowerCase();
+  const hhmm = `${parts.hour}:${parts.minute}`;
+  return schedule.windows.some((w) => w.days.includes(day) && w.start <= hhmm && hhmm < w.end);
+}
+
+// Should an unanswered page be blocked right now? With no status ever seen,
+// yes: failing open would make "stop the daemon" the easy way out.
+function enforcing(status) {
+  if (!status) return true;
+  return !status.shadow && isFocus(status.schedule);
+}
+
+// --- per-tab state (survives the event page being unloaded) -----------------
+
+async function tabStates() {
+  const { tabs = {} } = await browser.storage.session.get("tabs");
+  return tabs;
+}
+
+async function remember(tabId, url, metadata) {
+  const tabs = await tabStates();
+  tabs[tabId] = { url, metadata };
+  await browser.storage.session.set({ tabs });
+}
+
+async function forget(tabId) {
+  const tabs = await tabStates();
+  delete tabs[tabId];
+  await browser.storage.session.set({ tabs });
+  browser.alarms.clear(`recheck:${tabId}`);
 }
 
 // --- badge -----------------------------------------------------------------
@@ -35,55 +125,124 @@ function setBadge(tabId, text, color, title) {
 }
 
 function showVerdict(tabId, res) {
-  if (res.would_verdict === "block") {
-    const prefix = res.shadow ? "would block" : "blocked";
-    setBadge(tabId, "✕", "#c0392b", `${prefix}: ${res.reason}`);
+  if (res.would_verdict === "block" && res.shadow) {
+    setBadge(tabId, "✕", "#c0392b", `would block: ${res.reason}`);
+  } else if (res.source === "grant") {
+    const until = new Date(res.expires_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    setBadge(tabId, "⏱", "#2c7be5", `granted on appeal until ${until}`);
   } else {
     setBadge(tabId, "", null, `allowed: ${res.reason}`);
   }
 }
 
-// --- classification ----------------------------------------------------------
+// --- classification and enforcement -----------------------------------------
 
-async function classify(url, metadata, tab) {
-  try {
-    const res = await call("/v1/classify", { url, metadata });
-    if (tab) showVerdict(tab.id, res);
-    console.debug("heimdall", res.would_verdict, res.reason, url);
-    return res;
-  } catch (e) {
-    if (tab) setBadge(tab.id, "!", "#e67e22", `daemon unreachable (${e.message || e})`);
-    console.warn("heimdall: classify failed", url, e);
-    return { verdict: "error", error: String(e) };
-  }
+function blockTab(tabId, params) {
+  const url = `${BLOCKED_PAGE}?${new URLSearchParams(params)}`;
+  // Replace the blocked page in history, so Back doesn't bounce into it again.
+  return browser.tabs.update(tabId, { url, loadReplace: true }).catch(() => {});
 }
 
-browser.runtime.onMessage.addListener((msg, sender) => {
-  if (msg?.type === "classify") {
-    return classify(msg.url, msg.metadata ?? null, sender.tab);
+const pendingReports = new Map(); // tabId -> {url, timer}
+
+async function classify(url, metadata, tabId) {
+  const pending = pendingReports.get(tabId);
+  if (pending && pending.url === url) {
+    clearTimeout(pending.timer);
+    pendingReports.delete(tabId);
   }
-  return undefined;
+
+  let res;
+  try {
+    res = await call("/v1/classify", { url, metadata });
+  } catch (e) {
+    console.warn("heimdall: classify failed", url, e);
+    if (tabId !== undefined && enforcing(await cachedStatus())) {
+      setBadge(tabId, "!", "#e67e22", "daemon unreachable: failing closed");
+      blockTab(tabId, { u: url, x: "1" });
+      return { verdict: "block", unreachable: true };
+    }
+    if (tabId !== undefined) setBadge(tabId, "!", "#e67e22", `daemon unreachable (${e.message || e})`);
+    return { verdict: "allow", error: String(e) };
+  }
+
+  if (tabId === undefined) return res;
+  showVerdict(tabId, res);
+  await remember(tabId, url, metadata);
+  if (res.verdict === "block") {
+    blockTab(tabId, { u: url, d: res.decision_id, r: res.reason, a: res.appealable ? "1" : "0" });
+  } else if (res.expires_at) {
+    browser.alarms.create(`recheck:${tabId}`, { when: Date.parse(res.expires_at) + 1000 });
+  }
+  return res;
+}
+
+// Re-run the decision for a tab still showing the page we last judged
+// (a grant ran out, or focus hours began).
+async function recheck(tabId) {
+  const state = (await tabStates())[tabId];
+  if (!state) return;
+  const tab = await browser.tabs.get(Number(tabId)).catch(() => null);
+  if (!tab || tab.url !== state.url) return;
+  await classify(state.url, state.metadata, Number(tabId));
+}
+
+function expectReport(tabId, url) {
+  const old = pendingReports.get(tabId);
+  if (old) clearTimeout(old.timer);
+  const timer = setTimeout(async () => {
+    pendingReports.delete(tabId);
+    const tab = await browser.tabs.get(tabId).catch(() => null);
+    if (tab && tab.url === url) {
+      console.error("heimdall: no report from content script for", url);
+      classify(url, { extraction_error: "content script never reported" }, tabId);
+    }
+  }, REPORT_GRACE_MS);
+  pendingReports.set(tabId, { url, timer });
+}
+
+// --- messages ---------------------------------------------------------------
+
+browser.runtime.onMessage.addListener((msg, sender) => {
+  switch (msg?.type) {
+    case "classify": // content script reporting its page
+      return classify(msg.url, msg.metadata ?? null, sender.tab?.id);
+    case "curtain?": // content script: hide the page while we decide?
+      return cachedStatus().then((s) => ({ curtain: enforcing(s) }));
+    case "status": // block page
+      return refreshStatus(true);
+    case "appeal": // block page
+      return call("/v1/appeal", { decision_id: msg.decision_id, justification: msg.justification })
+        .then((body) => ({ ok: true, body }))
+        .catch((e) => ({ ok: false, status: e.status ?? 0, body: e.body ?? { detail: "heimdall daemon unreachable" } }));
+    default:
+      return undefined;
+  }
 });
+
+// --- navigation -------------------------------------------------------------
+
+browser.webNavigation.onCommitted.addListener(
+  (d) => {
+    if (d.frameId === 0) expectReport(d.tabId, d.url);
+  },
+  { url: FILTERED },
+);
 
 // SPA navigations (X's pushState, YouTube's too as a backstop). The content
 // script dedupes by URL, so double notifications are harmless.
 browser.webNavigation.onHistoryStateUpdated.addListener(
-  (details) => {
-    if (details.frameId !== 0) return;
-    browser.tabs.sendMessage(details.tabId, { type: "navigated", url: details.url }).catch(() => {});
+  (d) => {
+    if (d.frameId !== 0) return;
+    expectReport(d.tabId, d.url);
+    browser.tabs.sendMessage(d.tabId, { type: "navigated", url: d.url }).catch(() => {});
   },
-  {
-    url: [
-      { hostSuffix: "youtube.com" },
-      { hostEquals: "x.com" },
-      { hostSuffix: ".x.com" },
-      { hostEquals: "twitter.com" },
-      { hostSuffix: ".twitter.com" },
-    ],
-  },
+  { url: FILTERED },
 );
 
-// --- heartbeat and status cache ---------------------------------------------
+browser.tabs.onRemoved.addListener((tabId) => forget(tabId));
+
+// --- alarms: heartbeat, status, re-checks ------------------------------------
 
 async function heartbeat() {
   try {
@@ -93,23 +252,17 @@ async function heartbeat() {
   }
 }
 
-async function refreshStatus(force = false) {
-  const { statusFetchedAt = 0 } = await browser.storage.local.get("statusFetchedAt");
-  if (!force && Date.now() - statusFetchedAt < STATUS_REFRESH_MS) return;
-  try {
-    const status = await call("/v1/status");
-    await browser.storage.local.set({ status, statusFetchedAt: Date.now() });
-  } catch (e) {
-    console.warn("heimdall: status refresh failed", e);
-  }
-}
-
 // The event page can be unloaded when idle; alarms wake it back up.
 browser.alarms.create("heartbeat", { periodInMinutes: 0.5 });
-browser.alarms.onAlarm.addListener((alarm) => {
+browser.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === "heartbeat") {
     heartbeat();
     refreshStatus();
+  } else if (alarm.name === "focus-change") {
+    await refreshStatus(true);
+    for (const tabId of Object.keys(await tabStates())) recheck(tabId);
+  } else if (alarm.name.startsWith("recheck:")) {
+    recheck(alarm.name.slice("recheck:".length));
   }
 });
 

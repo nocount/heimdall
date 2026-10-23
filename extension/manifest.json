@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "heimdall",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Content-aware focus filter for YouTube and X. Talks only to the local heimdall daemon.",
   "browser_specific_settings": {
     "gecko": {
@@ -42,7 +42,7 @@
     {
       "matches": ["*://x.com/*", "*://*.x.com/*", "*://twitter.com/*", "*://*.twitter.com/*"],
       "js": ["content/common.js", "content/x.js"],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ]
 }

@@ -93,7 +93,7 @@ class Config(BaseModel):
     focus_windows: list[FocusWindow] = [
         FocusWindow(days=["mon", "tue", "wed", "thu", "fri"], start="09:00", end="17:00")
     ]
-    shadow: bool = True
+    shadow: bool = False
     force_focus: bool | None = None
     db_path: str = "/var/lib/heimdall/heimdall.db"
     classifier: ClassifierConfig = ClassifierConfig(provider="openrouter", model="typesafe/jev-1.13")

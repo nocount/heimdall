@@ -1,5 +1,6 @@
-// YouTube: report every page; on /watch, include the video's metadata read
-// from the player via page/yt-bridge.js.
+// YouTube: check every page; on /watch, include the video's metadata read
+// from the player via page/yt-bridge.js. Pages stay under the curtain until
+// the daemon allows them.
 
 (() => {
   const PLAYER_REPLY_MS = 500;
@@ -53,14 +54,15 @@
   async function onPage(url) {
     const u = new URL(url);
     if (u.pathname !== "/watch") {
-      heimdall.report(url, null);
+      heimdall.check(url, null);
       return;
     }
     const videoId = u.searchParams.get("v");
-    const metadata = videoId ? await watchMetadata(videoId) : null;
-    if (location.href !== url) return; // navigated away while extracting
-    if (!metadata) console.error("heimdall: could not read player metadata for", videoId);
-    heimdall.report(url, metadata || { extraction_error: "player response unavailable" });
+    heimdall.check(url, async () => {
+      const metadata = videoId ? await watchMetadata(videoId) : null;
+      if (!metadata) console.error("heimdall: could not read player metadata for", videoId);
+      return metadata || { extraction_error: "player response unavailable" };
+    });
   }
 
   // yt-navigate-finish fires on first load and after every in-page navigation.

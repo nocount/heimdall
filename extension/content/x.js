@@ -1,4 +1,4 @@
-// X: report every page; on single posts and profiles, include their text. The
+// X: check every page; on single posts and profiles, include their text. The
 // daemon blocks X by rule without classifying it; the text is logged with the
 // decision as context for an appeal. X's markup changes often: every selector
 // lives in SEL.
@@ -56,28 +56,27 @@
     };
   }
 
+  // X is blocked by rule, so this text only serves as context for an appeal.
+  // Wait briefly for it: the page sits under the curtain meanwhile.
+  const EXTRACT_MS = 2000;
+
   async function onPage(url) {
     const path = new URL(url).pathname;
-    let metadata = null;
-    let kind = null;
-
     const status = path.match(STATUS);
     const first = path.split("/")[1] || "";
+    let kind = null;
+    let extract = null;
     if (status) {
       kind = "status";
-      metadata = await heimdall.waitFor(() => extractStatus(status[2]));
+      extract = () => extractStatus(status[2]);
     } else if (first && !NOT_PROFILES.has(first.toLowerCase()) && /^[A-Za-z0-9_]{1,15}$/.test(first)) {
       kind = "profile";
-      metadata = await heimdall.waitFor(() => extractProfile(first));
+      extract = () => extractProfile(first);
     }
-    // Search needs only the query, which the daemon reads from the URL.
-
-    if (location.href !== url) return; // navigated away while extracting
-    if (kind && !metadata) {
-      console.error(`heimdall: could not extract ${kind} from`, url);
-      metadata = { extraction_error: `${kind} content not found` };
-    }
-    heimdall.report(url, metadata);
+    heimdall.check(url, extract && (async () => {
+      const metadata = await heimdall.waitFor(extract, EXTRACT_MS);
+      return metadata || { extraction_error: `${kind} content not found` };
+    }));
   }
 
   heimdall.watchUrl(onPage);

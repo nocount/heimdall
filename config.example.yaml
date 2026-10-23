@@ -7,8 +7,9 @@ focus_windows:
     start: "09:00"
     end: "17:00"
 
-# Shadow mode: always serve "allow", but log the would-be verdict. Phase 1.
-shadow: true
+# Shadow mode: always serve "allow", but log the would-be verdict (Phase 1).
+# false enforces: blocked pages redirect to the block page (Phase 2).
+shadow: false
 
 # Dev only: true/false overrides the schedule, null follows it.
 force_focus: null

@@ -37,7 +37,7 @@ class FakeClassifier:
 
 @pytest.fixture
 def config(tmp_path):
-    return Config(db_path=str(tmp_path / "test.db"))
+    return Config(db_path=str(tmp_path / "test.db"), shadow=True)
 
 
 YT_META = {
