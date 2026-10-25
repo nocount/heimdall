@@ -1,0 +1,18 @@
+[Unit]
+Description=heimdall watchdog: Firefox must run heimdall during focus hours, other browsers may not
+After=heimdall.service
+
+[Service]
+# Root, to signal browsers running as other users and inside snap confinement.
+User=root
+Environment=HEIMDALL_CONFIG=/etc/heimdall/config.yaml
+ExecStart=/opt/heimdall/venv/bin/heimdall watchdog
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

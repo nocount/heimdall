@@ -83,9 +83,14 @@ class Rules(BaseModel):
 
 
 class WatchdogConfig(BaseModel):
-    heartbeat_timeout_s: int = 60
-    startup_grace_s: int = 90
-    kill_browsers: list[str] = []
+    poll_s: int = 15
+    # The extension heartbeats once a minute (Firefox's floor for alarms in
+    # installed extensions): allow a missed beat plus jitter.
+    heartbeat_timeout_s: int = 150
+    startup_grace_s: int = 60
+    # Exact process names (or executable basenames) killed during focus hours.
+    kill_browsers: list[str] = ["chromium", "chromium-browser", "chrome", "google-chrome", "brave",
+                                "vivaldi", "vivaldi-bin", "opera", "epiphany", "msedge"]
 
 
 class Config(BaseModel):

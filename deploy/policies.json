@@ -1,0 +1,14 @@
+{
+  "policies": {
+    "ExtensionSettings": {
+      "heimdall@nocount": {
+        "installation_mode": "force_installed",
+        "install_url": "file:///etc/firefox/policies/heimdall.xpi",
+        "private_browsing": true,
+        "updates_disabled": true
+      }
+    },
+    "DisableSafeMode": true,
+    "BlockAboutProfiles": true
+  }
+}

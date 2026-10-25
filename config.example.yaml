@@ -50,7 +50,10 @@ rules:
 
 cache_ttl_days: { youtube: 30 }
 
-watchdog:                       # Phase 3; not used yet
-  heartbeat_timeout_s: 60
-  startup_grace_s: 90
-  kill_browsers: [chromium, chrome, google-chrome, brave, vivaldi, opera, epiphany]
+watchdog:                       # runs as root (heimdall-watchdog.service)
+  poll_s: 15
+  heartbeat_timeout_s: 150      # Firefox up but the extension silent this long: kill Firefox
+                                # (it heartbeats every minute; this allows a missed beat)
+  startup_grace_s: 60           # leave a freshly started Firefox alone this long
+  # Exact process names (or executable basenames) killed during focus hours.
+  kill_browsers: [chromium, chromium-browser, chrome, google-chrome, brave, vivaldi, vivaldi-bin, opera, epiphany, msedge]

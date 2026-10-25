@@ -13,8 +13,12 @@ bench/data/*
 
 # Local overrides
 config.local.yaml
+config.prod.yaml
 secrets.env
 
 extension/node_modules/
 extension/web-ext-artifacts/
 web-ext-profile/
+
+# AMO signing credentials (deploy/sign.sh)
+amo.env

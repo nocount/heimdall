@@ -252,8 +252,10 @@ async function heartbeat() {
   }
 }
 
-// The event page can be unloaded when idle; alarms wake it back up.
-browser.alarms.create("heartbeat", { periodInMinutes: 0.5 });
+// The event page can be unloaded when idle; alarms wake it back up. Firefox
+// rounds periods under a minute up to one for installed (signed) extensions,
+// so ask for a minute; the watchdog's heartbeat timeout allows for that.
+browser.alarms.create("heartbeat", { periodInMinutes: 1 });
 browser.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === "heartbeat") {
     heartbeat();

@@ -1,4 +1,4 @@
-"""`heimdall serve | status | review`."""
+"""`heimdall serve | status | review | watchdog`."""
 
 from __future__ import annotations
 
@@ -28,6 +28,23 @@ def cmd_serve(args) -> None:
     # Never bind anything but loopback: the API has no auth beyond the origin check.
     uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="info" if args.access_log else "warning",
                 access_log=args.access_log)
+
+
+def cmd_watchdog(args) -> None:
+    from .watchdog import Watchdog, daemon_status, terminate
+
+    if os.geteuid() != 0 and not args.dry_run:
+        sys.exit("the watchdog must run as root to stop other users' browsers (or use --dry-run)")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    config = load_config(args.config)
+    dry_run_kill = lambda pids: print(f"[dry run] would kill {list(pids)}")  # noqa: E731
+    dog = Watchdog(config, status=lambda: daemon_status(args.port),
+                   kill=dry_run_kill if args.dry_run else terminate)
+    if args.once:
+        for action in dog.tick(datetime.now(timezone.utc)):
+            print(action)
+        return
+    dog.run()
 
 
 def cmd_status(args) -> None:
@@ -100,6 +117,11 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--access-log", action="store_true", help="log every request (noisy: heartbeats)")
     s.set_defaults(func=cmd_serve)
     sub.add_parser("status", help="show daemon status").set_defaults(func=cmd_status)
+
+    w = sub.add_parser("watchdog", help="kill other browsers, and Firefox without heimdall, in focus hours")
+    w.add_argument("--once", action="store_true", help="one pass, then exit")
+    w.add_argument("--dry-run", action="store_true", help="report what would be killed; kill nothing")
+    w.set_defaults(func=cmd_watchdog)
 
     r = sub.add_parser("review", help="review recent model decisions and label mistakes")
     r.add_argument("which", nargs="?", choices=["all", "blocks", "allows"], default="all")

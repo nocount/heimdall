@@ -6,12 +6,13 @@ decision model), not by domain. X is blocked outright during focus hours. A
 blocked page can be appealed in one sentence, judged by Claude Haiku 5.5; a
 grant opens that one page for 10–40 minutes. See [PLAN.md](PLAN.md) for the design.
 
-**Status:** Phases 0–2 are built: bench, shadow mode, and enforcement with
-appeals. Phase 3 (lockdown: signed XPI, Firefox policy, root watchdog) is next.
+**Status:** Phases 0–3 are built: bench, shadow mode, enforcement with
+appeals, and lockdown (system services, Firefox policy, root watchdog).
 
 ```
 daemon/      FastAPI daemon on 127.0.0.1:7878 + `heimdall` CLI (uv project)
 extension/   Firefox MV3 extension (heimdall@nocount)
+deploy/      signing, install/uninstall scripts, systemd units, Firefox policy
 bench/       Phase 0 classifier bake-off scripts; personal data in bench/data/ is gitignored
 ```
 
@@ -96,3 +97,49 @@ Set `force_focus: true` in `config.local.yaml` to test outside 9–5.
 cd daemon && uv run pytest
 cd extension && npx web-ext lint
 ```
+
+## Lockdown (Phase 3)
+
+Installed, heimdall can't be turned off without `sudo`: the daemon runs as a
+system user, Firefox force-installs the extension in every profile and in
+private windows, and a root watchdog closes Firefox if the extension goes
+quiet (safe mode, a crashed extension) and kills other browsers, during focus
+hours only.
+
+1. **Sign the extension.** Get AMO API credentials at
+   <https://addons.mozilla.org/developers/addon/api/key/> and put them in
+   `amo.env` (gitignored) as `WEB_EXT_API_KEY=...` and `WEB_EXT_API_SECRET=...`.
+   Then `deploy/sign.sh`. Unlisted: Mozilla's automated review signs it, and
+   it isn't published. Each signing needs a new version in `manifest.json`.
+2. **Write a production config**: a copy of `config.local.yaml` with
+   `force_focus: null` (install refuses a forced schedule). `db_path` is
+   ignored; the service uses /var/lib/heimdall.
+3. **Install**, from the repo root, with the dev daemon stopped:
+
+   ```bash
+   sudo deploy/install.sh --xpi extension/web-ext-artifacts/heimdall-0.3.0.xpi --config config.prod.yaml
+   ```
+
+4. **Restart Firefox**, check `about:policies` and `about:addons`, then work
+   through [deploy/BYPASS-TESTS.md](deploy/BYPASS-TESTS.md).
+
+Day to day:
+
+```bash
+journalctl -u heimdall -u heimdall-watchdog -f       # decisions, appeals, kills
+sudoedit /etc/heimdall/config.yaml && sudo systemctl restart heimdall heimdall-watchdog
+sudo -u heimdall env HEIMDALL_CONFIG=/etc/heimdall/config.yaml HEIMDALL_DB=/var/lib/heimdall/heimdall.db \
+  /opt/heimdall/venv/bin/heimdall review --list -n 50
+sudo deploy/uninstall.sh                             # the way back out (--purge to delete everything)
+```
+
+Run `review` as the `heimdall` user, not plain `sudo`: root opening the
+database while the daemon is stopped can leave root-owned SQLite files the
+daemon can't write. To label as you review, pass `--labels
+/var/lib/heimdall/labels.csv`, then copy that file into `bench/data/`.
+
+Developing after lockdown: the installed daemon owns port 7878, so stop it
+(`sudo systemctl stop heimdall-watchdog heimdall`) before running a dev
+daemon, and the force-installed extension is also present in `web-ext`
+profiles. To ship an extension change, bump the version, re-sign, and re-run
+install.sh.

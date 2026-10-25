@@ -1,0 +1,31 @@
+[Unit]
+Description=heimdall focus filter daemon
+Documentation=file:///opt/heimdall/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=heimdall
+Group=heimdall
+Environment=HEIMDALL_CONFIG=/etc/heimdall/config.yaml
+Environment=HEIMDALL_DB=/var/lib/heimdall/heimdall.db
+EnvironmentFile=/etc/heimdall/secrets.env
+ExecStart=/opt/heimdall/venv/bin/heimdall serve
+Restart=always
+RestartSec=2
+
+StateDirectory=heimdall
+StateDirectoryMode=0750
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
