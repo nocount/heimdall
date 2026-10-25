@@ -215,3 +215,26 @@ def test_old_database_gets_appeal_columns(tmp_path):
     db = DB(str(path))
     cols = {r["name"] for r in db.query("PRAGMA table_info(appeals)")}
     assert {"site", "key"} <= cols
+
+
+async def test_any_judge_exception_becomes_judge_error(config):
+    # The SDK raises a plain TypeError when it has no credentials.
+    msgs = FakeMessages(error=TypeError("Could not resolve authentication method"))
+    judge = AppealJudge(config.appeals, client=SimpleNamespace(messages=msgs))
+    with pytest.raises(AppealJudgeError, match="unavailable"):
+        await judge.judge(AppealCase(WATCH, "youtube watch", None, "", GOOD, []))
+
+
+def test_no_credentials_disables_appeals(config, monkeypatch):
+    from heimdall.app import make_judge
+
+    for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE", "ANTHROPIC_BASE_URL"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("HOME", "/nonexistent")  # no login profile on disk
+    assert make_judge(config) is None
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    assert make_judge(config) is not None
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    app = create_app(config, FakeClassifier(answers=yt_answers()), clock=Clock(FOCUS))
+    assert TestClient(app).get("/v1/status").json()["appeals"]["enabled"] is False

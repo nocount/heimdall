@@ -43,11 +43,16 @@ def utcnow() -> datetime:
 
 
 def make_judge(config: Config) -> AppealJudge | None:
+    """The appeal judge, or None (appeals refused, block page says so) if it can't work."""
     try:
-        return AppealJudge(config.appeals)
-    except Exception as e:  # e.g. no Anthropic credentials: run, but refuse appeals
+        judge = AppealJudge(config.appeals)
+    except Exception as e:
         log.warning("appeals disabled: %s", e)
         return None
+    if not judge.configured:
+        log.warning("appeals disabled: no Anthropic credentials (set ANTHROPIC_API_KEY in secrets.env)")
+        return None
+    return judge
 
 
 def create_app(config: Config | None = None, classifier: Classifier | None = None,

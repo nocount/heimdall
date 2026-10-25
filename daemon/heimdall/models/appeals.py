@@ -91,6 +91,13 @@ class AppealJudge:
         # One retry: the user is waiting on the block page.
         self.client = client or anthropic.AsyncAnthropic(timeout=cfg.timeout_s, max_retries=1)
 
+    @property
+    def configured(self) -> bool:
+        """Whether the client found credentials (key, token, or a login profile).
+        Without them the SDK only fails at request time, with a TypeError."""
+        c = self.client
+        return bool(getattr(c, "api_key", None) or getattr(c, "auth_token", None) or getattr(c, "credentials", None))
+
     async def judge(self, case: AppealCase) -> tuple[AppealVerdict, dict]:
         """Return the verdict and a record of the raw output for the appeals log."""
         try:
@@ -101,7 +108,9 @@ class AppealJudge:
                 messages=[{"role": "user", "content": render(case, self.cfg.focus_rules)}],
                 output_format=AppealVerdict,
             )
-        except anthropic.APIError as e:
+        except Exception as e:
+            # API errors, but also e.g. the SDK's TypeError for missing
+            # credentials: a judge failure must never surface as a 500.
             raise AppealJudgeError(f"appeal judge unavailable: {e.__class__.__name__}: {e}") from e
         if response.stop_reason == "refusal":
             raise AppealJudgeError("appeal judge declined to answer")
