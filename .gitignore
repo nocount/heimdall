@@ -22,3 +22,4 @@ web-ext-profile/
 
 # AMO signing credentials (deploy/sign.sh)
 amo.env
+extension/.amo-upload-uuid

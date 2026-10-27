@@ -244,21 +244,39 @@ browser.tabs.onRemoved.addListener((tabId) => forget(tabId));
 
 // --- alarms: heartbeat, status, re-checks ------------------------------------
 
+const HEARTBEAT_EVERY_MS = 30 * 1000;
+let lastSent = 0; // this page instance; storage.session carries it across reloads
+
 async function heartbeat() {
+  lastSent = Date.now();
   try {
     await call("/v1/heartbeat", { client: "firefox", version: VERSION });
+    await browser.storage.session.set({ lastHeartbeat: Date.now() });
   } catch (e) {
     console.warn("heimdall: heartbeat failed", e);
   }
 }
 
-// The event page can be unloaded when idle; alarms wake it back up. Firefox
-// rounds periods under a minute up to one for installed (signed) extensions,
-// so ask for a minute; the watchdog's heartbeat timeout allows for that.
-browser.alarms.create("heartbeat", { periodInMinutes: 1 });
+// Firefox unloads this event page after ~30s idle and re-runs this file on
+// the next event. So:
+// - Only create the heartbeat alarm if it's missing. alarms.create() with an
+//   existing name replaces the alarm and restarts its countdown; re-creating
+//   it on every wake-up meant that while browsing (wake-ups 30-60s apart) it
+//   never fired, and the watchdog killed a healthy Firefox.
+// - Also heartbeat on wake-up when the last one is stale, so liveness doesn't
+//   hinge on the alarm alone.
+// Firefox rounds alarm periods under a minute up to one for installed
+// extensions; the watchdog's heartbeat timeout allows for a minute plus a miss.
+browser.alarms.get("heartbeat").then((alarm) => {
+  if (!alarm) browser.alarms.create("heartbeat", { periodInMinutes: 1 });
+});
+browser.storage.session.get("lastHeartbeat").then(({ lastHeartbeat = 0 }) => {
+  if (Date.now() - Math.max(lastSent, lastHeartbeat) > HEARTBEAT_EVERY_MS) heartbeat();
+});
+
 browser.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === "heartbeat") {
-    heartbeat();
+    if (Date.now() - lastSent > HEARTBEAT_EVERY_MS) heartbeat();
     refreshStatus();
   } else if (alarm.name === "focus-change") {
     await refreshStatus(true);
