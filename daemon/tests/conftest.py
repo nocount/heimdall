@@ -37,7 +37,11 @@ class FakeClassifier:
 
 @pytest.fixture
 def config(tmp_path):
-    return Config(db_path=str(tmp_path / "test.db"), shadow=True)
+    # YouTube judged by the classifier (the default config blocks it outright),
+    # so these tests keep exercising that path.
+    c = Config(db_path=str(tmp_path / "test.db"), shadow=True)
+    c.rules.hard_block_domains = ["x.com", "twitter.com"]
+    return c
 
 
 YT_META = {

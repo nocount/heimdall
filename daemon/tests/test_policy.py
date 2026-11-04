@@ -190,3 +190,27 @@ async def test_decisions_logged(config):
     row = policy.db.decision(decision_id)
     assert (row["verdict"], row["served"], row["shadow"], row["model"]) == ("block", "allow", 1, "fake:model")
     assert row["reason"] == "rated only 20% worth learning from"
+
+
+async def test_youtube_fully_blocked_by_default(tmp_path):
+    config = Config(db_path=str(tmp_path / "t.db"))  # the shipped default
+    config.rules.youtube.allow_channels = ["UCuniversity"]
+    policy, clf = make(config, answers=yt_answers(0.99))
+    for url in [WATCH, "https://www.youtube.com/results?search_query=x", "https://m.youtube.com/@chan"]:
+        _, d, served = await policy.evaluate(url, YT_META, FOCUS)
+        assert (d.verdict, d.source, served) == ("block", "rule", "block")
+        assert d.reason == f"{pages.parse(url).host} is blocked during focus hours"
+    assert clf.calls == []  # not even an allowlisted channel or a 99% video gets through
+    assert pages.appealable(pages.parse(WATCH))
+    _, d, _ = await policy.evaluate(WATCH, YT_META, EVENING)
+    assert d.verdict == "allow"
+
+
+async def test_youtube_grant_opens_one_video_despite_hard_block(tmp_path):
+    config = Config(db_path=str(tmp_path / "t.db"))
+    policy, _ = make(config)
+    policy.db.add_grant("youtube", "abc123", FOCUS + timedelta(minutes=10), appeal_id=1)
+    _, d, _ = await policy.evaluate(WATCH, YT_META, FOCUS)
+    assert (d.verdict, d.source) == ("allow", "grant")
+    _, d, _ = await policy.evaluate("https://www.youtube.com/watch?v=other", YT_META, FOCUS)
+    assert d.verdict == "block"

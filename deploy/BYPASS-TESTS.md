@@ -1,7 +1,7 @@
 # Bypass tests
 
 Run these during focus hours after `deploy/install.sh` and a Firefox restart.
-Each should fail to get you to a blocked page. For testing outside 9–5, set
+Each should fail to get you to a blocked page. For testing outside 9–4, set
 `force_focus: true` in /etc/heimdall/config.yaml (`sudoedit`, then
 `sudo systemctl restart heimdall heimdall-watchdog`, and pass
 `--allow-force-focus` to install.sh if you re-run it). Set it back to `null`
@@ -11,7 +11,7 @@ Watch the watchdog while testing: `journalctl -u heimdall-watchdog -f`
 
 | # | Attempt | Expected |
 |---|---------|----------|
-| 1 | Open a non-allowlisted YouTube video in a private window | Block page (the policy runs heimdall in private windows) |
+| 1 | Open a YouTube video in a private window | Block page (the policy runs heimdall in private windows) |
 | 2 | `firefox -P`, create a new profile, open the video | Block page: the policy applies to every profile |
 | 3 | about:addons: disable or remove heimdall | No Disable/Remove controls; the extension stays |
 | 4 | about:profiles | Blocked by policy |

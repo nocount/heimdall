@@ -29,7 +29,7 @@ def test_status_and_heartbeat(config):
     assert s["focus"] is True
     assert s["shadow"] is True
     assert s["last_heartbeat"] == "2026-10-21T17:00:00+00:00"
-    assert s["next_change"] == "2026-10-22T00:00:00+00:00"
+    assert s["next_change"] == "2026-10-21T23:00:00+00:00"
     assert s["classifier"]["primary"] == "fake:model"
 
 

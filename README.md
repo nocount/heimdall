@@ -1,10 +1,12 @@
 # heimdall
 
-Watcher app for managing social platform use during focus hours: a Firefox
-extension plus a local daemon that judge YouTube videos by their content (a
-decision model), not by domain. X is blocked outright during focus hours. A
-blocked page can be appealed in one sentence, judged by Claude Haiku 5.5; a
-grant opens that one page for 10–40 minutes. See [PLAN.md](PLAN.md) for the design.
+Watcher app for managing social platform use during focus hours (weekdays
+9–4 Pacific): a Firefox extension plus a local daemon. YouTube and X are
+blocked outright; a blocked video, post or profile can be appealed in one
+sentence, judged by Claude Haiku 5.5, and a grant opens that one page for
+10–40 minutes. The content classifier (a decision model judging each video,
+plus a channel allowlist) is still built in: take `youtube.com` out of
+`rules.hard_block_domains` to switch back to it. See [PLAN.md](PLAN.md) for the design.
 
 **Status:** Phases 0–3 are built: bench, shadow mode, enforcement with
 appeals, and lockdown (system services, Firefox policy, root watchdog).
@@ -89,7 +91,7 @@ uv run --project daemon heimdall --config config.local.yaml review --list -n 50
 Marking a decision correct or wrong appends it to `bench/data/labels.csv`, so
 `run_bench.py` re-tunes thresholds on real browsing.
 
-Set `force_focus: true` in `config.local.yaml` to test outside 9–5.
+Set `force_focus: true` in `config.local.yaml` to test outside 9–4.
 
 ## Tests
 

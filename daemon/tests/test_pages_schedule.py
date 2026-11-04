@@ -47,15 +47,15 @@ def test_focus_window():
     assert not s.is_focus(EVENING)
     # Saturday 10:00 PDT
     assert not s.is_focus(datetime(2026, 10, 24, 17, 0, tzinfo=timezone.utc))
-    # 17:00 is the end, exclusive; 16:59 is in.
-    assert not s.is_focus(datetime(2026, 10, 22, 0, 0, tzinfo=timezone.utc))
-    assert s.is_focus(datetime(2026, 10, 21, 23, 59, tzinfo=timezone.utc))
+    # 16:00 is the end, exclusive; 15:59 is in.
+    assert not s.is_focus(datetime(2026, 10, 21, 23, 0, tzinfo=timezone.utc))
+    assert s.is_focus(datetime(2026, 10, 21, 22, 59, tzinfo=timezone.utc))
 
 
 def test_next_change():
     s = Schedule(Config())
-    # Wed 10:00 PDT -> ends Wed 17:00 PDT
-    assert s.next_change(FOCUS) == datetime(2026, 10, 22, 0, 0, tzinfo=timezone.utc)
+    # Wed 10:00 PDT -> ends Wed 16:00 PDT
+    assert s.next_change(FOCUS) == datetime(2026, 10, 21, 23, 0, tzinfo=timezone.utc)
     # Fri 18:00 PDT -> next Mon 09:00 PDT
     fri = datetime(2026, 10, 24, 1, 0, tzinfo=timezone.utc)
     assert s.next_change(fri) == datetime(2026, 10, 26, 16, 0, tzinfo=timezone.utc)

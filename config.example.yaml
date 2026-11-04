@@ -5,7 +5,7 @@ timezone: America/Los_Angeles
 focus_windows:
   - days: [mon, tue, wed, thu, fri]
     start: "09:00"
-    end: "17:00"
+    end: "16:00"
 
 # Shadow mode: always serve "allow", but log the would-be verdict (Phase 1).
 # false enforces: blocked pages redirect to the block page (Phase 2).
@@ -43,9 +43,10 @@ rules:
     # in a decision's metadata (`heimdall review --list`) or the channel page.
     allow_channels: []
     #  - UCxxxxxxxxxxxxxxxxxxxxxx   # Channel name
-  # Blocked outright during focus hours; an appeal grants one post, profile
-  # or search (by ID) for a while. X isn't sent to the classifier.
-  hard_block_domains: [x.com, twitter.com]   # add other time sinks, e.g. reddit.com
+  # Blocked outright during focus hours, before the channel allowlist or the
+  # classifier: an appeal grants one video, post, profile or search for a
+  # while. Remove youtube.com to go back to judging videos by content.
+  hard_block_domains: [x.com, twitter.com, youtube.com]   # other time sinks too, e.g. reddit.com
   always_allow_domains: []
 
 cache_ttl_days: { youtube: 30 }

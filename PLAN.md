@@ -41,7 +41,7 @@ Status: **plan, not yet built**. Target machine: the Ubuntu desktop (Ryzen 7800X
 | Decision logic | Atomic questions to the model; rules in code | Decision models work best on small typed questions. Code combines them, so rules stay tunable and auditable without re-prompting. |
 | Failure policy | **Fail closed** during focus hours | Otherwise "stop the daemon" or "lose network" becomes the easy out. |
 | Block mechanism | Redirect to an extension page, not a DOM overlay | An overlay can be deleted via devtools in seconds. A redirect can't, so devtools stay available for your dev work. |
-| Focus hours | **Mon–Fri 09:00–17:00 America/Los_Angeles** | Your "9-5". *Assumption:* weekdays only. Change it in config. |
+| Focus hours | **Mon–Fri 09:00–16:00 America/Los_Angeles** | *Changed 2026-11-04 from 09:00–17:00.* Weekdays only. Change it in config. |
 | Daemon language | Python 3.12 + FastAPI | Fast to build; matches your stack. |
 
 ---
@@ -196,6 +196,7 @@ Evaluated in order. The first match wins.
    - Always-allow domains → **allow**
 4. **Cache hit** (video ID or tweet ID within its TTL) → reuse the verdict.
 5. **Model call** with the atomic questions (section 7). Then the code applies the rules:
+   - *Since 2026-11-04, `youtube.com` is in `hard_block_domains`, so YouTube is blocked outright at step 3 (appeals still open single videos) and nothing below runs for it. Even educational videos took too much working time. The classifier and allowlist are kept for if that changes.*
    - YouTube: videos from channels in `rules.youtube.allow_channels` are allowed before the cache or model is consulted. Otherwise, allow requires `P(worth_learning) ≥ θ`, a single question: "Would this be worth watching for someone who wants to learn about AI, technology, or science, rather than to be entertained?"
      - *Changed after Phase 0.* The original rule was `content_type ∈ {tutorial_or_lecture, technical_talk}` and `P(educational) ≥ θ_edu` and `confidence ≥ θ_conf`. It blocked most allow labels, which were AI interviews and podcasts that the models correctly call commentary or news. `educational` alone kept 8/23 (leave-one-out). Adding `ai_related` + `substantive` questions kept 16/23, and `worth_learning` alone matched that at a third of the request size. The allowlist, seeded with five channels holding 12 of the 23 allows, brought it to 20/23 with 1/173 false allows.
    - X: not classified. *Changed after Phase 0:* X is in `hard_block_domains`, so every X page is blocked during focus hours, and a granted appeal opens one post, profile or search.

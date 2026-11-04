@@ -51,11 +51,11 @@ class ClassifierConfig(ProviderConfig):
 
 
 DEFAULT_FOCUS_RULES = """\
-During focus hours I want to work. On YouTube I only watch videos that help me
-learn about AI, technology or science: lectures, talks, expert interviews and
-in-depth analysis, not entertainment, gaming, reactions or hype. X is blocked
-outright because its feeds are a time sink; I open a specific post or profile
-only when I have a concrete reason."""
+During focus hours I want to work, not watch. YouTube and X are blocked
+outright: even educational videos and interesting threads ate my working
+time. I open a specific video, post or profile only when the task in front
+of me needs it now (a video a teammate asked me to review, docs that only
+exist as a video), not because it's useful or interesting in general."""
 
 
 class AppealsConfig(BaseModel):
@@ -77,8 +77,8 @@ class SiteRules(BaseModel):
 
 class Rules(BaseModel):
     youtube: SiteRules = SiteRules(block_paths=["/", "/shorts/*", "/feed/*"])
-    # X is blocked outright; only an appeal grant opens a specific post or profile.
-    hard_block_domains: list[str] = ["x.com", "twitter.com"]
+    # Blocked outright; only an appeal grant opens a specific video, post or profile.
+    hard_block_domains: list[str] = ["x.com", "twitter.com", "youtube.com"]
     always_allow_domains: list[str] = []
 
 
@@ -96,7 +96,7 @@ class WatchdogConfig(BaseModel):
 class Config(BaseModel):
     timezone: str = "America/Los_Angeles"
     focus_windows: list[FocusWindow] = [
-        FocusWindow(days=["mon", "tue", "wed", "thu", "fri"], start="09:00", end="17:00")
+        FocusWindow(days=["mon", "tue", "wed", "thu", "fri"], start="09:00", end="16:00")
     ]
     shadow: bool = False
     force_focus: bool | None = None
