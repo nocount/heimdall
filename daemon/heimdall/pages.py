@@ -15,6 +15,8 @@ X_RESERVED = {
     "compose", "login", "logout", "signup", "tos", "privacy", "jobs", "hashtag",
     "communities", "premium", "account", "intent", "share",
 }
+REDDIT_POST = re.compile(r"^/(?:r/[^/]+/|u(?:ser)?/[^/]+/)?comments/([a-z0-9]+)", re.I)
+REDDIT_SORTS = {"hot", "new", "top", "rising", "controversial", "best"}
 X_STATUS = re.compile(r"^/([A-Za-z0-9_]{1,15})/status/(\d+)")
 X_HANDLE = re.compile(r"^[A-Za-z0-9_]{1,15}$")
 
@@ -72,6 +74,27 @@ def _x(url: str, host: str, path: str, query: dict) -> Page:
     return page("other")
 
 
+def _reddit(url: str, host: str, path: str) -> Page:
+    def page(page_type: str, item_id: str | None = None) -> Page:
+        return Page(url, "reddit", host, path, page_type, item_id)
+
+    if m := REDDIT_POST.match(path):
+        return page("post", m.group(1).lower())
+    parts = [p for p in path.split("/") if p]
+    if not parts or (len(parts) == 1 and parts[0] in REDDIT_SORTS):
+        return page("home")
+    if parts[0] == "r" and len(parts) >= 2:
+        if len(parts) == 2 or parts[2] in REDDIT_SORTS:
+            # r/all and r/popular are the front page by another name.
+            return page("home" if parts[1].lower() in {"all", "popular"} else "subreddit")
+        return page("other")  # wiki, about, a share link mid-redirect...
+    if parts[0] in {"user", "u"} and len(parts) >= 2:
+        return page("user", f"u:{parts[1].lower()}")
+    if parts[0] == "search":
+        return page("search")
+    return page("other")
+
+
 def parse(url: str) -> Page:
     parts = urlsplit(url)
     host = (parts.hostname or "").lower()
@@ -81,6 +104,8 @@ def parse(url: str) -> Page:
         return _youtube(url, host, path, query)
     if host in X_HOSTS:
         return _x(url, host, path, query)
+    if host == "reddit.com" or host.endswith(".reddit.com"):
+        return _reddit(url, host, path)
     return Page(url, "other", host, path, "other")
 
 
@@ -95,6 +120,7 @@ def host_matches(host: str, domains: list[str]) -> bool:
 NOT_APPEALABLE = {
     "youtube": {"home", "shorts", "feed"},
     "x": {"home", "explore", "notifications", "list", "root"},
+    "reddit": {"home", "subreddit"},
 }
 
 

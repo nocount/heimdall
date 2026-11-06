@@ -71,3 +71,28 @@ def test_dst_transition():
 def test_force_focus():
     assert Schedule(Config(force_focus=True)).is_focus(EVENING)
     assert not Schedule(Config(force_focus=False)).is_focus(FOCUS)
+
+
+@pytest.mark.parametrize("url,ptype,item,appealable", [
+    ("https://www.reddit.com/", "home", None, False),
+    ("https://www.reddit.com/best/", "home", None, False),
+    ("https://www.reddit.com/r/popular/", "home", None, False),
+    ("https://old.reddit.com/r/all/top/?t=day", "home", None, False),
+    ("https://www.reddit.com/r/LocalLLaMA/", "subreddit", None, False),
+    ("https://www.reddit.com/r/LocalLLaMA/new/", "subreddit", None, False),
+    ("https://www.reddit.com/r/LocalLLaMA/comments/1abcde/some_title/", "post", "1abcde", True),
+    ("https://old.reddit.com/r/linux/comments/XyZ12/t/k8s9xyz/", "post", "xyz12", True),
+    ("https://www.reddit.com/comments/1abcde", "post", "1abcde", True),
+    ("https://www.reddit.com/user/someone/comments/9zz9/hi/", "post", "9zz9", True),
+    ("https://www.reddit.com/user/someone/", "user", "u:someone", True),
+    ("https://www.reddit.com/search/?q=kv+cache", "search", None, True),
+    ("https://www.reddit.com/r/linux/wiki/faq", "other", None, True),
+])
+def test_parse_reddit(url, ptype, item, appealable):
+    p = pages.parse(url)
+    assert (p.site, p.page_type, p.item_id) == ("reddit", ptype, item)
+    assert pages.appealable(p) is appealable
+
+
+def test_not_reddit():
+    assert pages.parse("https://notreddit.com/r/x/comments/abc/").site == "other"

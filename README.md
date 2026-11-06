@@ -1,10 +1,11 @@
 # heimdall
 
 Watcher app for managing social platform use during focus hours (weekdays
-9–4 Pacific): a Firefox extension plus a local daemon. YouTube and X are
-blocked outright; a blocked video, post or profile can be appealed in one
-sentence, judged by Claude Haiku 5.5, and a grant opens that one page for
-10–40 minutes. The content classifier (a decision model judging each video,
+9–4 Pacific): a Firefox extension plus a local daemon. YouTube, X and Reddit
+are blocked outright; a blocked video, post, profile or thread can be
+appealed in one sentence, judged by Claude Haiku 5.5, and a grant opens that
+one page for 10–40 minutes. Feeds (home pages, subreddits, Shorts) can't be
+appealed. The content classifier (a decision model judging each video,
 plus a channel allowlist) is still built in: take `youtube.com` out of
 `rules.hard_block_domains` to switch back to it. See [PLAN.md](PLAN.md) for the design.
 
@@ -119,7 +120,7 @@ hours only.
 3. **Install**, from the repo root, with the dev daemon stopped:
 
    ```bash
-   sudo deploy/install.sh --xpi extension/web-ext-artifacts/heimdall-0.3.0.xpi --config config.prod.yaml
+   sudo deploy/install.sh --xpi extension/web-ext-artifacts/<signed>.xpi --config config.prod.yaml
    ```
 
 4. **Restart Firefox**, check `about:policies` and `about:addons`, then work

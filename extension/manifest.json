@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "heimdall",
-  "version": "0.3.1",
-  "description": "Content-aware focus filter for YouTube and X. Talks only to the local heimdall daemon.",
+  "version": "0.3.2",
+  "description": "Focus filter for YouTube, X and Reddit. Talks only to the local heimdall daemon.",
   "browser_specific_settings": {
     "gecko": {
       "id": "heimdall@nocount",
@@ -19,6 +19,8 @@
     "*://*.x.com/*",
     "*://twitter.com/*",
     "*://*.twitter.com/*",
+    "*://reddit.com/*",
+    "*://*.reddit.com/*",
     "http://127.0.0.1:7878/*"
   ],
   "background": {
@@ -42,6 +44,11 @@
     {
       "matches": ["*://x.com/*", "*://*.x.com/*", "*://twitter.com/*", "*://*.twitter.com/*"],
       "js": ["content/common.js", "content/x.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["*://reddit.com/*", "*://*.reddit.com/*"],
+      "js": ["content/common.js", "content/reddit.js"],
       "run_at": "document_start"
     }
   ]

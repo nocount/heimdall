@@ -22,6 +22,8 @@ const FILTERED = [
   { hostSuffix: ".x.com" },
   { hostEquals: "twitter.com" },
   { hostSuffix: ".twitter.com" },
+  { hostEquals: "reddit.com" },
+  { hostSuffix: ".reddit.com" },
 ];
 
 class DaemonError extends Error {

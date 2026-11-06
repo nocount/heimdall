@@ -46,7 +46,8 @@ rules:
   # Blocked outright during focus hours, before the channel allowlist or the
   # classifier: an appeal grants one video, post, profile or search for a
   # while. Remove youtube.com to go back to judging videos by content.
-  hard_block_domains: [x.com, twitter.com, youtube.com]   # other time sinks too, e.g. reddit.com
+  # Only sites the extension watches can be blocked: YouTube, X and Reddit.
+  hard_block_domains: [x.com, twitter.com, youtube.com, reddit.com]
   always_allow_domains: []
 
 cache_ttl_days: { youtube: 30 }

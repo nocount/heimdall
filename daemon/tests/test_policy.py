@@ -214,3 +214,21 @@ async def test_youtube_grant_opens_one_video_despite_hard_block(tmp_path):
     assert (d.verdict, d.source) == ("allow", "grant")
     _, d, _ = await policy.evaluate("https://www.youtube.com/watch?v=other", YT_META, FOCUS)
     assert d.verdict == "block"
+
+
+async def test_reddit_blocked_by_default(tmp_path):
+    config = Config(db_path=str(tmp_path / "t.db"))
+    policy, clf = make(config)
+    for url in ["https://www.reddit.com/", "https://old.reddit.com/r/linux/",
+                "https://www.reddit.com/r/linux/comments/abc12/fix_for_my_bug/"]:
+        _, d, served = await policy.evaluate(url, None, FOCUS)
+        assert (d.verdict, d.source, served) == ("block", "rule", "block")
+    assert clf.calls == []
+    # A grant opens one thread, not the subreddit.
+    policy.db.add_grant("reddit", "abc12", FOCUS + timedelta(minutes=10), appeal_id=1)
+    _, d, _ = await policy.evaluate("https://www.reddit.com/r/linux/comments/abc12/fix_for_my_bug/", None, FOCUS)
+    assert (d.verdict, d.source) == ("allow", "grant")
+    _, d, _ = await policy.evaluate("https://www.reddit.com/r/linux/", None, FOCUS)
+    assert d.verdict == "block"
+    _, d, _ = await policy.evaluate("https://www.reddit.com/", None, EVENING)
+    assert d.verdict == "allow"

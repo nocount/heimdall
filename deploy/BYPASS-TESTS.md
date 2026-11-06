@@ -12,6 +12,7 @@ Watch the watchdog while testing: `journalctl -u heimdall-watchdog -f`
 | # | Attempt | Expected |
 |---|---------|----------|
 | 1 | Open a YouTube video in a private window | Block page (the policy runs heimdall in private windows) |
+| 1b | Reddit: www, old. and new. front pages, a subreddit, a thread | Block page; appeal box on the thread only |
 | 2 | `firefox -P`, create a new profile, open the video | Block page: the policy applies to every profile |
 | 3 | about:addons: disable or remove heimdall | No Disable/Remove controls; the extension stays |
 | 4 | about:profiles | Blocked by policy |

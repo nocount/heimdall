@@ -51,11 +51,12 @@ class ClassifierConfig(ProviderConfig):
 
 
 DEFAULT_FOCUS_RULES = """\
-During focus hours I want to work, not watch. YouTube and X are blocked
-outright: even educational videos and interesting threads ate my working
-time. I open a specific video, post or profile only when the task in front
-of me needs it now (a video a teammate asked me to review, docs that only
-exist as a video), not because it's useful or interesting in general."""
+During focus hours I want to work, not watch or scroll. YouTube, X and
+Reddit are blocked outright: even educational videos and interesting threads
+ate my working time. I open a specific video, post or thread only when the
+task in front of me needs it now (a video a teammate asked me to review, a
+Reddit thread with the fix for the bug I'm on, docs that only exist as a
+video), not because it's useful or interesting in general."""
 
 
 class AppealsConfig(BaseModel):
@@ -78,7 +79,7 @@ class SiteRules(BaseModel):
 class Rules(BaseModel):
     youtube: SiteRules = SiteRules(block_paths=["/", "/shorts/*", "/feed/*"])
     # Blocked outright; only an appeal grant opens a specific video, post or profile.
-    hard_block_domains: list[str] = ["x.com", "twitter.com", "youtube.com"]
+    hard_block_domains: list[str] = ["x.com", "twitter.com", "youtube.com", "reddit.com"]
     always_allow_domains: list[str] = []
 
 
