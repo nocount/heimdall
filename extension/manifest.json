@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "heimdall",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Focus filter for YouTube, X and Reddit. Talks only to the local heimdall daemon.",
   "browser_specific_settings": {
     "gecko": {

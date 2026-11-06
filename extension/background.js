@@ -10,6 +10,9 @@
 
 const DAEMON = "http://127.0.0.1:7878";
 const REQUEST_TIMEOUT_MS = 3000;
+// Appeals wait on the judge model, which the daemon gives up to 20s
+// (appeals.timeout_s). Wait a bit longer so its answer, or its 503, arrives.
+const APPEAL_TIMEOUT_MS = 25000;
 const STATUS_REFRESH_MS = 5 * 60 * 1000;
 // A content script that hasn't reported a navigation by now is broken or
 // gone; classify the URL without metadata, which the daemon fails closed on.
@@ -34,9 +37,9 @@ class DaemonError extends Error {
   }
 }
 
-async function call(path, body) {
+async function call(path, body, timeoutMs = REQUEST_TIMEOUT_MS) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const resp = await fetch(DAEMON + path, {
       method: body === undefined ? "GET" : "POST",
@@ -214,9 +217,17 @@ browser.runtime.onMessage.addListener((msg, sender) => {
     case "status": // block page
       return refreshStatus(true);
     case "appeal": // block page
-      return call("/v1/appeal", { decision_id: msg.decision_id, justification: msg.justification })
+      return call("/v1/appeal", { decision_id: msg.decision_id, justification: msg.justification }, APPEAL_TIMEOUT_MS)
         .then((body) => ({ ok: true, body }))
-        .catch((e) => ({ ok: false, status: e.status ?? 0, body: e.body ?? { detail: "heimdall daemon unreachable" } }));
+        .catch((e) => ({
+          ok: false,
+          status: e.status ?? 0,
+          body: e.body ?? {
+            detail: e.name === "AbortError"
+              ? "The appeal took too long to come back. Try again in a moment."
+              : "heimdall daemon unreachable",
+          },
+        }));
     default:
       return undefined;
   }

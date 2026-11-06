@@ -65,7 +65,7 @@ class AppealsConfig(BaseModel):
     max_per_day: int = 5
     deny_cooldown_min: int = 10
     max_grant_min: int = 40
-    timeout_s: float = 20
+    timeout_s: float = 20  # whole judge call; keep under the extension's APPEAL_TIMEOUT_MS
     # What the judge is told you want from focus hours, in your own words.
     focus_rules: str = DEFAULT_FOCUS_RULES
 

@@ -225,6 +225,19 @@ async def test_any_judge_exception_becomes_judge_error(config):
         await judge.judge(AppealCase(WATCH, "youtube watch", None, "", GOOD, []))
 
 
+async def test_slow_judge_times_out_as_judge_error(config):
+    import asyncio
+
+    class SlowMessages:
+        async def parse(self, **kwargs):
+            await asyncio.sleep(5)
+
+    judge = AppealJudge(config.appeals.model_copy(update={"timeout_s": 0.05}),
+                        client=SimpleNamespace(messages=SlowMessages()))
+    with pytest.raises(AppealJudgeError, match="longer than 0.05s"):
+        await judge.judge(AppealCase(WATCH, "youtube watch", None, "", GOOD, []))
+
+
 def test_no_credentials_disables_appeals(config, monkeypatch):
     from heimdall.app import make_judge
 

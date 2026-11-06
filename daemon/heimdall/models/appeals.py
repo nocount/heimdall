@@ -5,6 +5,7 @@ are enforced in code before and after this call, never by the model.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from typing import Literal
@@ -101,13 +102,18 @@ class AppealJudge:
     async def judge(self, case: AppealCase) -> tuple[AppealVerdict, dict]:
         """Return the verdict and a record of the raw output for the appeals log."""
         try:
-            response = await self.client.messages.parse(
+            # timeout_s bounds the whole call, retry included: the extension
+            # waits a little longer than this for the answer (APPEAL_TIMEOUT_MS
+            # in background.js), so the user always sees how it went.
+            response = await asyncio.wait_for(self.client.messages.parse(
                 model=self.cfg.model,
                 max_tokens=4000,
                 system=SYSTEM,
                 messages=[{"role": "user", "content": render(case, self.cfg.focus_rules)}],
                 output_format=AppealVerdict,
-            )
+            ), timeout=self.cfg.timeout_s)
+        except TimeoutError as e:
+            raise AppealJudgeError(f"appeal judge took longer than {self.cfg.timeout_s:g}s") from e
         except Exception as e:
             # API errors, but also e.g. the SDK's TypeError for missing
             # credentials: a judge failure must never surface as a 500.
