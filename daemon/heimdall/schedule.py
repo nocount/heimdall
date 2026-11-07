@@ -18,8 +18,11 @@ def _parse_hhmm(s: str) -> time:
 def _in_window(w: FocusWindow, local: datetime) -> bool:
     if DAYS[local.weekday()] not in w.days:
         return False
-    start, end = _parse_hhmm(w.start), _parse_hhmm(w.end)
-    return start <= local.time() < end
+    start = _parse_hhmm(w.start)
+    # "24:00" (end of day) isn't a datetime.time; every time of day is before it.
+    if w.end == "24:00":
+        return start <= local.time()
+    return start <= local.time() < _parse_hhmm(w.end)
 
 
 class Schedule:

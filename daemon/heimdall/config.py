@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 DEFAULT_CONFIG_PATH = "/etc/heimdall/config.yaml"
 
@@ -15,10 +16,24 @@ Day = Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 ProviderName = Literal["workers_ai", "openrouter", "local_llamacpp"]
 
 
+HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
 class FocusWindow(BaseModel):
     days: list[Day]
-    start: str  # "HH:MM"
-    end: str
+    start: str  # "HH:MM", local time
+    end: str  # "HH:MM", exclusive; "24:00" means through midnight
+
+    @model_validator(mode="after")
+    def _check(self):
+        if not HHMM.match(self.start):
+            raise ValueError(f"focus window start {self.start!r} is not HH:MM (00:00-23:59)")
+        if not (HHMM.match(self.end) or self.end == "24:00"):
+            raise ValueError(f"focus window end {self.end!r} is not HH:MM (00:01-24:00)")
+        if self.start >= self.end:
+            raise ValueError(f"focus window {self.start}-{self.end} must start before it ends "
+                             "(split overnight windows in two)")
+        return self
 
 
 class Thresholds(BaseModel):
@@ -97,7 +112,7 @@ class WatchdogConfig(BaseModel):
 class Config(BaseModel):
     timezone: str = "America/Los_Angeles"
     focus_windows: list[FocusWindow] = [
-        FocusWindow(days=["mon", "tue", "wed", "thu", "fri"], start="09:00", end="16:00")
+        FocusWindow(days=["mon", "tue", "wed", "thu", "fri"], start="00:00", end="24:00")
     ]
     shadow: bool = False
     force_focus: bool | None = None

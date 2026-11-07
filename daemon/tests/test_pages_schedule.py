@@ -3,10 +3,10 @@ from datetime import datetime, timezone
 import pytest
 
 from heimdall import pages
-from heimdall.config import Config
+from heimdall.config import Config, FocusWindow
 from heimdall.schedule import Schedule
 
-from .conftest import EVENING, FOCUS
+from .conftest import EVENING, FOCUS, WORKDAY
 
 
 @pytest.mark.parametrize("url,site,ptype,item", [
@@ -42,7 +42,7 @@ def test_host_matches():
 
 
 def test_focus_window():
-    s = Schedule(Config())
+    s = Schedule(Config(focus_windows=WORKDAY))
     assert s.is_focus(FOCUS)
     assert not s.is_focus(EVENING)
     # Saturday 10:00 PDT
@@ -53,7 +53,7 @@ def test_focus_window():
 
 
 def test_next_change():
-    s = Schedule(Config())
+    s = Schedule(Config(focus_windows=WORKDAY))
     # Wed 10:00 PDT -> ends Wed 16:00 PDT
     assert s.next_change(FOCUS) == datetime(2026, 10, 21, 23, 0, tzinfo=timezone.utc)
     # Fri 18:00 PDT -> next Mon 09:00 PDT
@@ -63,9 +63,30 @@ def test_next_change():
 
 def test_dst_transition():
     # Mon 2026-11-02 09:30 PST (UTC-8) is focus; the window follows local time.
-    s = Schedule(Config())
+    s = Schedule(Config(focus_windows=WORKDAY))
     assert s.is_focus(datetime(2026, 11, 2, 17, 30, tzinfo=timezone.utc))
     assert not s.is_focus(datetime(2026, 11, 2, 16, 30, tzinfo=timezone.utc))
+
+
+def test_default_is_all_day_on_weekdays():
+    s = Schedule(Config())
+    assert s.is_focus(FOCUS) and s.is_focus(EVENING)
+    # Wed 00:00 and 23:59 PDT are in; Sat 00:00 and Sun 23:59 PDT are out.
+    assert s.is_focus(datetime(2026, 10, 21, 7, 0, tzinfo=timezone.utc))
+    assert s.is_focus(datetime(2026, 10, 22, 6, 59, tzinfo=timezone.utc))
+    assert not s.is_focus(datetime(2026, 10, 24, 7, 0, tzinfo=timezone.utc))
+    assert not s.is_focus(datetime(2026, 10, 26, 6, 59, tzinfo=timezone.utc))
+    # Wed -> ends Sat 00:00 PDT; Sat -> starts Mon 00:00 PDT.
+    assert s.next_change(FOCUS) == datetime(2026, 10, 24, 7, 0, tzinfo=timezone.utc)
+    sat = datetime(2026, 10, 24, 17, 0, tzinfo=timezone.utc)
+    assert s.next_change(sat) == datetime(2026, 10, 26, 7, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize("start,end", [("9:00", "16:00"), ("09:00", "24:01"), ("24:00", "24:00"),
+                                       ("16:00", "09:00"), ("09:00", "09:00"), ("09:60", "16:00")])
+def test_bad_focus_window_rejected(start, end):
+    with pytest.raises(ValueError):
+        FocusWindow(days=["mon"], start=start, end=end)
 
 
 def test_force_focus():

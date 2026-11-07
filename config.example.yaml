@@ -4,8 +4,8 @@
 timezone: America/Los_Angeles
 focus_windows:
   - days: [mon, tue, wed, thu, fri]
-    start: "09:00"
-    end: "16:00"
+    start: "00:00"
+    end: "24:00"                # "24:00" = through midnight
 
 # Shadow mode: always serve "allow", but log the would-be verdict (Phase 1).
 # false enforces: blocked pages redirect to the block page (Phase 2).

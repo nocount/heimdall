@@ -41,7 +41,7 @@ Status: **plan, not yet built**. Target machine: the Ubuntu desktop (Ryzen 7800X
 | Decision logic | Atomic questions to the model; rules in code | Decision models work best on small typed questions. Code combines them, so rules stay tunable and auditable without re-prompting. |
 | Failure policy | **Fail closed** during focus hours | Otherwise "stop the daemon" or "lose network" becomes the easy out. |
 | Block mechanism | Redirect to an extension page, not a DOM overlay | An overlay can be deleted via devtools in seconds. A redirect can't, so devtools stay available for your dev work. |
-| Focus hours | **Mon–Fri 09:00–16:00 America/Los_Angeles** | *Changed 2026-11-04 from 09:00–17:00.* Weekdays only. Change it in config. |
+| Focus hours | **Mon–Fri all day (00:00–24:00) America/Los_Angeles** | *Changed 2026-11-06 to all day; 09:00–16:00 from 2026-11-04, 09:00–17:00 before that.* Weekends are open. Change it in config; `end: "24:00"` means through midnight. |
 | Daemon language | Python 3.12 + FastAPI | Fast to build; matches your stack. |
 
 ---

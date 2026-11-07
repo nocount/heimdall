@@ -202,7 +202,11 @@ async def test_youtube_fully_blocked_by_default(tmp_path):
         assert d.reason == f"{pages.parse(url).host} is blocked during focus hours"
     assert clf.calls == []  # not even an allowlisted channel or a 99% video gets through
     assert pages.appealable(pages.parse(WATCH))
+    # Weekday evenings are focus hours now too; weekends are open.
     _, d, _ = await policy.evaluate(WATCH, YT_META, EVENING)
+    assert d.verdict == "block"
+    saturday = FOCUS + timedelta(days=3)
+    _, d, _ = await policy.evaluate(WATCH, YT_META, saturday)
     assert d.verdict == "allow"
 
 
@@ -230,5 +234,5 @@ async def test_reddit_blocked_by_default(tmp_path):
     assert (d.verdict, d.source) == ("allow", "grant")
     _, d, _ = await policy.evaluate("https://www.reddit.com/r/linux/", None, FOCUS)
     assert d.verdict == "block"
-    _, d, _ = await policy.evaluate("https://www.reddit.com/", None, EVENING)
+    _, d, _ = await policy.evaluate("https://www.reddit.com/", None, FOCUS + timedelta(days=3))  # Saturday
     assert d.verdict == "allow"

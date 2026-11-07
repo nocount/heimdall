@@ -1,7 +1,7 @@
 # heimdall
 
-Watcher app for managing social platform use during focus hours (weekdays
-9–4 Pacific): a Firefox extension plus a local daemon. YouTube, X and Reddit
+Watcher app for managing social platform use during focus hours (all day
+Monday–Friday, Pacific time): a Firefox extension plus a local daemon. YouTube, X and Reddit
 are blocked outright; a blocked video, post, profile or thread can be
 appealed in one sentence, judged by Claude Haiku 5.5, and a grant opens that
 one page for 10–40 minutes. Feeds (home pages, subreddits, Shorts) can't be
@@ -92,7 +92,7 @@ uv run --project daemon heimdall --config config.local.yaml review --list -n 50
 Marking a decision correct or wrong appends it to `bench/data/labels.csv`, so
 `run_bench.py` re-tunes thresholds on real browsing.
 
-Set `force_focus: true` in `config.local.yaml` to test outside 9–4.
+Set `force_focus: true` in `config.local.yaml` to test on a weekend.
 
 ## Tests
 

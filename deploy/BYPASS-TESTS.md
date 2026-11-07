@@ -1,7 +1,7 @@
 # Bypass tests
 
 Run these during focus hours after `deploy/install.sh` and a Firefox restart.
-Each should fail to get you to a blocked page. For testing outside 9–4, set
+Each should fail to get you to a blocked page. For testing on a weekend, set
 `force_focus: true` in /etc/heimdall/config.yaml (`sudoedit`, then
 `sudo systemctl restart heimdall heimdall-watchdog`, and pass
 `--allow-force-focus` to install.sh if you re-run it). Set it back to `null`
