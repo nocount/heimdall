@@ -5,7 +5,10 @@ Monday–Friday, Pacific time): a Firefox extension plus a local daemon. YouTube
 are blocked outright; a blocked video, post, profile or thread can be
 appealed in one sentence, judged by Claude Haiku 5.5, and a grant opens that
 one page for 10–40 minutes. Feeds (home pages, subreddits, Shorts) can't be
-appealed. The content classifier (a decision model judging each video,
+appealed. YouTube players embedded in other sites are blocked too: the
+player turns into a plain "Blocked during focus hours" box, with no appeal,
+and the rest of the page stays usable. A video granted on youtube.com also
+plays when embedded. The content classifier (a decision model judging each video,
 plus a channel allowlist) is still built in: take `youtube.com` out of
 `rules.hard_block_domains` to switch back to it. See [PLAN.md](PLAN.md) for the design.
 

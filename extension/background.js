@@ -21,6 +21,7 @@ const VERSION = browser.runtime.getManifest().version;
 const BLOCKED_PAGE = browser.runtime.getURL("ui/blocked.html");
 const FILTERED = [
   { hostSuffix: "youtube.com" },
+  { hostSuffix: "youtube-nocookie.com" },
   { hostEquals: "x.com" },
   { hostSuffix: ".x.com" },
   { hostEquals: "twitter.com" },
@@ -182,6 +183,18 @@ async function classify(url, metadata, tabId) {
   return res;
 }
 
+// A YouTube player embedded in another site's page. The frame's own script
+// (content/embed.js) acts on the verdict; the tab is the host page, so it's
+// left alone, and no badge or tab state is touched.
+async function classifyFrame(url) {
+  try {
+    return await call("/v1/classify", { url, metadata: null });
+  } catch (e) {
+    console.warn("heimdall: classify failed (embed)", url, e);
+    return { verdict: enforcing(await cachedStatus()) ? "block" : "allow", unreachable: true };
+  }
+}
+
 // Re-run the decision for a tab still showing the page we last judged
 // (a grant ran out, or focus hours began).
 async function recheck(tabId) {
@@ -212,6 +225,8 @@ browser.runtime.onMessage.addListener((msg, sender) => {
   switch (msg?.type) {
     case "classify": // content script reporting its page
       return classify(msg.url, msg.metadata ?? null, sender.tab?.id);
+    case "classify-frame": // embedded player reporting its frame
+      return classifyFrame(msg.url);
     case "curtain?": // content script: hide the page while we decide?
       return cachedStatus().then((s) => ({ curtain: enforcing(s) }));
     case "status": // block page

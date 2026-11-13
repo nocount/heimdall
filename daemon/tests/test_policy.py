@@ -220,6 +220,23 @@ async def test_youtube_grant_opens_one_video_despite_hard_block(tmp_path):
     assert d.verdict == "block"
 
 
+async def test_youtube_embeds_blocked_by_default(tmp_path):
+    config = Config(db_path=str(tmp_path / "t.db"))
+    policy, clf = make(config)
+    embeds = ["https://www.youtube.com/embed/abc123", "https://www.youtube-nocookie.com/embed/abc123?start=30"]
+    for url in embeds:
+        _, d, served = await policy.evaluate(url, None, FOCUS)
+        assert (d.verdict, d.source, served) == ("block", "rule", "block")
+    assert clf.calls == []
+    # A grant won on the watch page plays the same video embedded, too.
+    policy.db.add_grant("youtube", "abc123", FOCUS + timedelta(minutes=10), appeal_id=1)
+    for url in embeds:
+        _, d, _ = await policy.evaluate(url, None, FOCUS)
+        assert (d.verdict, d.source) == ("allow", "grant")
+    _, d, _ = await policy.evaluate("https://www.youtube-nocookie.com/embed/other", None, FOCUS)
+    assert d.verdict == "block"
+
+
 async def test_reddit_blocked_by_default(tmp_path):
     config = Config(db_path=str(tmp_path / "t.db"))
     policy, clf = make(config)

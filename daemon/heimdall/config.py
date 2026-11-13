@@ -94,7 +94,7 @@ class SiteRules(BaseModel):
 class Rules(BaseModel):
     youtube: SiteRules = SiteRules(block_paths=["/", "/shorts/*", "/feed/*"])
     # Blocked outright; only an appeal grant opens a specific video, post or profile.
-    hard_block_domains: list[str] = ["x.com", "twitter.com", "youtube.com", "reddit.com"]
+    hard_block_domains: list[str] = ["x.com", "twitter.com", "youtube.com", "youtube-nocookie.com", "reddit.com"]
     always_allow_domains: list[str] = []
 
 

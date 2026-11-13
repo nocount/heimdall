@@ -1,20 +1,30 @@
 {
   "manifest_version": 3,
   "name": "heimdall",
-  "version": "0.3.3",
-  "description": "Focus filter for YouTube, X and Reddit. Talks only to the local heimdall daemon.",
+  "version": "0.4.0",
+  "description": "Focus filter for YouTube (embeds too), X and Reddit. Talks only to the local heimdall daemon.",
   "browser_specific_settings": {
     "gecko": {
       "id": "heimdall@nocount",
       "strict_min_version": "136.0",
       "data_collection_permissions": {
-        "required": ["browsingActivity", "websiteContent"]
+        "required": [
+          "browsingActivity",
+          "websiteContent"
+        ]
       }
     }
   },
-  "permissions": ["tabs", "webNavigation", "storage", "alarms"],
+  "permissions": [
+    "tabs",
+    "webNavigation",
+    "storage",
+    "alarms"
+  ],
   "host_permissions": [
     "*://*.youtube.com/*",
+    "*://youtube-nocookie.com/*",
+    "*://*.youtube-nocookie.com/*",
     "*://x.com/*",
     "*://*.x.com/*",
     "*://twitter.com/*",
@@ -24,32 +34,87 @@
     "http://127.0.0.1:7878/*"
   ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js"
+    ]
   },
   "action": {
     "default_title": "heimdall"
   },
   "content_scripts": [
     {
-      "matches": ["*://*.youtube.com/*"],
-      "js": ["page/yt-bridge.js"],
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://youtube-nocookie.com/*",
+        "*://*.youtube-nocookie.com/*"
+      ],
+      "js": [
+        "page/yt-bridge.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
-      "matches": ["*://*.youtube.com/*"],
-      "js": ["content/common.js", "content/youtube.js"],
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://youtube-nocookie.com/*",
+        "*://*.youtube-nocookie.com/*"
+      ],
+      "js": [
+        "content/common.js",
+        "content/youtube.js"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["*://x.com/*", "*://*.x.com/*", "*://twitter.com/*", "*://*.twitter.com/*"],
-      "js": ["content/common.js", "content/x.js"],
+      "matches": [
+        "*://x.com/*",
+        "*://*.x.com/*",
+        "*://twitter.com/*",
+        "*://*.twitter.com/*"
+      ],
+      "js": [
+        "content/common.js",
+        "content/x.js"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["*://reddit.com/*", "*://*.reddit.com/*"],
-      "js": ["content/common.js", "content/reddit.js"],
+      "matches": [
+        "*://reddit.com/*",
+        "*://*.reddit.com/*"
+      ],
+      "js": [
+        "content/common.js",
+        "content/reddit.js"
+      ],
       "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "*://*.youtube.com/embed/*",
+        "*://youtube-nocookie.com/embed/*",
+        "*://*.youtube-nocookie.com/embed/*"
+      ],
+      "js": [
+        "content/common.js",
+        "content/embed.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "ui/embed-blocked.html",
+        "ui/embed-blocked.css"
+      ],
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://youtube-nocookie.com/*",
+        "*://*.youtube-nocookie.com/*"
+      ]
     }
   ]
 }

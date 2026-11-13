@@ -6,7 +6,9 @@ import re
 from dataclasses import dataclass
 from urllib.parse import parse_qs, urlsplit
 
-YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com"}
+YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com",
+                 # Privacy-enhanced embeds; same player, same video IDs.
+                 "youtube-nocookie.com", "www.youtube-nocookie.com"}
 X_HOSTS = {"x.com", "www.x.com", "mobile.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"}
 
 # First path segments on X that are app routes, not user handles.
@@ -40,6 +42,12 @@ def _youtube(url: str, host: str, path: str, query: dict) -> Page:
         return page("watch", vid)
     if path.startswith("/shorts/"):
         return page("shorts", path.split("/")[2] or None)
+    if path.startswith("/embed/"):
+        # The player inside an iframe on some other site. Keyed by video ID,
+        # so a grant for /watch?v=ID also opens the embed. "videoseries" is
+        # a playlist embed, with no single video to key on.
+        vid = path.split("/")[2]
+        return page("embed", vid if vid and vid != "videoseries" else None)
     if path == "/":
         return page("home")
     if path.startswith("/feed/"):

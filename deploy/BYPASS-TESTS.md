@@ -25,8 +25,8 @@ Watch the watchdog while testing: `journalctl -u heimdall-watchdog -f`
 | 11 | DevTools: delete `#heimdall-curtain` on a video page | Nothing gained: a block still redirects; an allowed page was going to be uncovered anyway |
 | 12 | DevTools on the block page: edit it, or navigate the tab back | The redirect repeats on any return to the blocked URL; there's no client-side state to forge |
 | 13 | about:debugging → load a temporary add-on with id heimdall@nocount | Should be refused while the policy version is installed; if not, note it |
-| 14 | Visit `https://www.youtube-nocookie.com/embed/<id>` or an embed on another site | **Expected to leak** (PLAN.md section 12). Note what you find |
-| 15 | Invidious / Piped front-ends | **Expected to leak**; add their domains to `hard_block_domains` as you meet them |
+| 14 | A YouTube embed on another site (e.g. a blog post or docs page), and `https://www.youtube-nocookie.com/embed/<id>` opened directly | The embedded player turns into a "Blocked during focus hours" box, rest of the page works; opened directly, the normal block page |
+| 15 | Invidious / Piped front-ends | **Expected to leak**: the extension doesn't watch their domains, so listing them in `hard_block_domains` alone does nothing |
 | 16 | Edit /etc/heimdall/config.yaml or /opt/heimdall without sudo | Permission denied |
 | 17 | Copy the Firefox binary under another name and run it | Policy still applies (system-wide /etc/firefox/policies), so heimdall still loads. A renamed *Chromium* binary dodges the kill list: accepted (PLAN.md section 12) |
 

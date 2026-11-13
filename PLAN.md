@@ -196,6 +196,7 @@ Evaluated in order. The first match wins.
    - Always-allow domains → **allow**
 4. **Cache hit** (video ID or tweet ID within its TTL) → reuse the verdict.
 5. **Model call** with the atomic questions (section 7). Then the code applies the rules:
+   - *Since 2026-11-12 (extension 0.4.0), YouTube players embedded in other sites (`youtube.com/embed/<id>` and `youtube-nocookie.com/embed/<id>` iframes) are blocked too. A script in the iframe reports it, and a block sends just that frame to a plain "Blocked during focus hours" page with no appeal; the host page is untouched. Embeds are keyed by video ID, so a grant won on `/watch` also plays the embed. When YouTube isn't hard-blocked, embeds are allowed (they carry no metadata for the classifier).*
    - *Since 2026-11-06, `reddit.com` is too (extension 0.3.2 watches Reddit): threads can be appealed, keyed by post ID; the front page, r/all, r/popular and subreddit listings can't.*
    - *Since 2026-11-04, `youtube.com` is in `hard_block_domains`, so YouTube is blocked outright at step 3 (appeals still open single videos) and nothing below runs for it. Even educational videos took too much working time. The classifier and allowlist are kept for if that changes.*
    - YouTube: videos from channels in `rules.youtube.allow_channels` are allowed before the cache or model is consulted. Otherwise, allow requires `P(worth_learning) ≥ θ`, a single question: "Would this be worth watching for someone who wants to learn about AI, technology, or science, rather than to be entertained?"
@@ -390,7 +391,7 @@ watchdog:
   - [ ] stop the daemon without sudo
   - [ ] install and launch Chromium via `flatpak --user`
   - [ ] devtools: delete the curtain, edit the block page
-  - [ ] `youtube-nocookie.com` embed on another site *(expected to leak; see section 12)*
+  - [ ] `youtube-nocookie.com` and `youtube.com` embeds on another site *(blocked in-frame since extension 0.4.0)*
 
 ### Later (post-POC)
 - Per-tweet filtering in the X timeline: batch-classify visible tweets and hide the non-AI ones.
@@ -456,7 +457,8 @@ heimdall/
 | Browsing metadata sent to Cloudflare and Anthropic | Privacy | Only titles/descriptions/tweet text, no cookies or history dumps; local Clef-flash if it bothers you |
 | `sudo` user can undo everything | Determined bypass | Accepted for level (b). Level (c) would need someone else to hold an admin password. |
 | Phone, other devices | Full bypass | Out of scope |
-| YouTube embeds on other sites, alternative frontends (Invidious etc.) | Leak | Add embed-domain and frontend-domain rules once noticed in logs |
+| YouTube embeds on other sites | ~~Leak~~ Blocked in-frame since 2026-11-12 | A frame the extension can't script (or a non-YouTube player) still plays |
+| Alternative frontends (Invidious etc.) | Leak | The extension would need to watch their domains; `hard_block_domains` alone doesn't block unwatched sites |
 | Renamed browser binary to dodge the watchdog kill list | Leak | Accepted; deliberate effort is the line |
 | Watchdog kills Firefox mid-task | Lost unsaved form state | Only triggers on missing heartbeat; session restore recovers tabs |
 
