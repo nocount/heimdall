@@ -1,7 +1,7 @@
 # heimdall
 
 Watcher app for managing social platform use during focus hours (all day
-Monday–Friday, Pacific time): a Firefox extension plus a local daemon. YouTube, X and Reddit
+Monday–Thursday and Friday until 4pm, Pacific time): a Firefox extension plus a local daemon. YouTube, X and Reddit
 are blocked outright; a blocked video, post, profile or thread can be
 appealed in one sentence, judged by Claude Haiku 5.5, and a grant opens that
 one page for 10–40 minutes. Feeds (home pages, subreddits, Shorts) can't be

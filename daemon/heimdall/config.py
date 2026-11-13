@@ -112,7 +112,8 @@ class WatchdogConfig(BaseModel):
 class Config(BaseModel):
     timezone: str = "America/Los_Angeles"
     focus_windows: list[FocusWindow] = [
-        FocusWindow(days=["mon", "tue", "wed", "thu", "fri"], start="00:00", end="24:00")
+        FocusWindow(days=["mon", "tue", "wed", "thu"], start="00:00", end="24:00"),
+        FocusWindow(days=["fri"], start="00:00", end="16:00"),
     ]
     shadow: bool = False
     force_focus: bool | None = None

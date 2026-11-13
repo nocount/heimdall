@@ -71,7 +71,7 @@ def test_dst_transition():
     assert not s.is_focus(datetime(2026, 11, 2, 16, 30, tzinfo=timezone.utc))
 
 
-def test_default_is_all_day_on_weekdays():
+def test_default_is_weekdays_until_friday_4pm():
     s = Schedule(Config())
     assert s.is_focus(FOCUS) and s.is_focus(EVENING)
     # Wed 00:00 and 23:59 PDT are in; Sat 00:00 and Sun 23:59 PDT are out.
@@ -79,10 +79,15 @@ def test_default_is_all_day_on_weekdays():
     assert s.is_focus(datetime(2026, 10, 22, 6, 59, tzinfo=timezone.utc))
     assert not s.is_focus(datetime(2026, 10, 24, 7, 0, tzinfo=timezone.utc))
     assert not s.is_focus(datetime(2026, 10, 26, 6, 59, tzinfo=timezone.utc))
-    # Wed -> ends Sat 00:00 PDT; Sat -> starts Mon 00:00 PDT.
-    assert s.next_change(FOCUS) == datetime(2026, 10, 24, 7, 0, tzinfo=timezone.utc)
-    sat = datetime(2026, 10, 24, 17, 0, tzinfo=timezone.utc)
-    assert s.next_change(sat) == datetime(2026, 10, 26, 7, 0, tzinfo=timezone.utc)
+    # Thu 23:59 into Fri 00:00 PDT stays in; Fri 15:59 PDT is in, 16:00 is out.
+    assert s.is_focus(datetime(2026, 10, 23, 6, 59, tzinfo=timezone.utc))
+    assert s.is_focus(datetime(2026, 10, 23, 7, 0, tzinfo=timezone.utc))
+    assert s.is_focus(datetime(2026, 10, 23, 22, 59, tzinfo=timezone.utc))
+    assert not s.is_focus(datetime(2026, 10, 23, 23, 0, tzinfo=timezone.utc))
+    # Wed -> ends Fri 16:00 PDT; Fri evening -> starts Mon 00:00 PDT.
+    assert s.next_change(FOCUS) == datetime(2026, 10, 23, 23, 0, tzinfo=timezone.utc)
+    fri_evening = datetime(2026, 10, 24, 1, 0, tzinfo=timezone.utc)
+    assert s.next_change(fri_evening) == datetime(2026, 10, 26, 7, 0, tzinfo=timezone.utc)
 
 
 @pytest.mark.parametrize("start,end", [("9:00", "16:00"), ("09:00", "24:01"), ("24:00", "24:00"),
